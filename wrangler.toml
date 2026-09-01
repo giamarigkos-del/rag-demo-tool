@@ -1,0 +1,11 @@
+name = "operations-portal-rag"
+main = "src/index.js"
+compatibility_date = "2026-08-01"
+
+[[vectorize]]
+binding = "VECTORIZE"
+index_name = "operations-portal-rag-index"
+
+[[kv_namespaces]]
+binding = "DOCUMENT_REGISTRY"
+id = "e6ea2213cca7424b988d24d5307ee1ca"
