@@ -80,7 +80,7 @@ async function handleUpload(request, env) {
   }
 
   const body = await request.json();
-  const { documentId, text, volatility } = body;
+  const { documentId, text, volatility, sourceUrl } = body;
 
   if (!documentId || !text) {
     return new Response(
@@ -126,6 +126,7 @@ async function handleUpload(request, env) {
       chunkCount: chunks.length,
       updatedAt: new Date().toISOString(),
       volatility: volatility || null,
+      sourceUrl: sourceUrl || null,
     })
   );
 
@@ -171,6 +172,7 @@ async function handleGetDocument(request, env, documentId) {
       documentId,
       chunkCount: existing.chunkCount,
       updatedAt: existing.updatedAt,
+      sourceUrl: existing.sourceUrl || null,
       text: fullText,
     }),
     { headers: JSON_HEADERS }
@@ -243,14 +245,22 @@ async function handleQuery(request, env) {
 
   // Η πιο σχετική πηγή -- αυτή που "κουβαλάει" κυρίως την απάντηση
   const topMatch = sortedMatches[0];
-  const primarySource = isFallback
-    ? null
-    : {
-        documentId: topMatch.metadata.documentId,
-        chunkIndex: topMatch.metadata.chunkIndex,
-        score: topMatch.score,
-        text: topMatch.metadata.text,
-      };
+
+  let primarySource = null;
+  if (!isFallback) {
+    // Βρες το sourceUrl του εγγράφου από το KV registry, για link προς το πρωτότυπο portal
+    const docKvKey = `session:${workspaceId}:doc:${topMatch.metadata.documentId}`;
+    const docRaw = await env.DOCUMENT_REGISTRY.get(docKvKey);
+    const docMeta = docRaw ? JSON.parse(docRaw) : {};
+
+    primarySource = {
+      documentId: topMatch.metadata.documentId,
+      chunkIndex: topMatch.metadata.chunkIndex,
+      score: topMatch.score,
+      text: topMatch.metadata.text,
+      sourceUrl: docMeta.sourceUrl || null,
+    };
+  }
 
   // Οι υπόλοιπες -- σαν "Σχετικές ενότητες" προτάσεις για τον χρήστη
   const relatedSections = isFallback

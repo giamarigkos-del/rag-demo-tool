@@ -1,136 +1,307 @@
-﻿$documentText = @'
-Shop Journey ονομάζουμε όλο το 'ταξίδι' που διανύει ένα κατάστημα που δεν συνεργάζεται με το efood, έως ότου βγει Live στην πλατφόρμα και μπορεί να πάρει παραγγελίες.
+﻿const CHUNK_SIZE = 300;
+const CHUNK_OVERLAP = 30;
+const TOP_K = 4;
+const JSON_HEADERS = { "Content-Type": "application/json; charset=utf-8" };
 
-Επιπρόσθετα, περιλαμβάνει την επικοινωνία με διαφορετικά τμήματα, ανάλογα με το πότε θα επικοινωνήσει και τον λόγο επικοινωνία. Συνοπτικά, θα μπορούσαμε να περιγράψουμε την πορεία αυτή ως εξής:
+function chunkText(text) {
+  const words = text.trim().split(/\s+/);
+  const chunks = [];
+  let start = 0;
 
-1. To be Live
+  while (start < words.length) {
+    const end = Math.min(start + CHUNK_SIZE, words.length);
+    chunks.push(words.slice(start, end).join(" "));
+    if (end === words.length) break;
+    start += CHUNK_SIZE - CHUNK_OVERLAP;
+  }
 
-1. Acquisition
-Το Sales Team, συγκεκριμένα οι Field Sales / Telesales agents, πραγματοποιούν την πρώτη επικοινωνία με τα καταστήματα, η οποία μπορεί να είναι είτε τηλεφωνική, είτε με δια ζώσης. Κατα την επικοινωνία αυτή, γίνεται παρουσίαση του efood και συζητούν το ενδεχόμενο μιας επικείμενης συνεργασίας. Οι εξωτερικοί πωλητές έχουν σαν στόχο να συμφωνήσει το κατάστημα σε συνεργασία και να συλλέξουν τα 4 απαραίτητα στοιχεία για να ξεκινήσει η συνεργασία:
-
-απόδειξη / σφραγίδα
-
-Menu (& Logo)
-
-ΙΒΑΝ
-
-στοιχεία του υπευθύνου (όνομα, τηλέφωνο, email)
-
-Μόλις τα συλλέξουν, στέλνουν ηλεκτρονικά το συμβόλαιο συνεργασίας για υπογραφή από το κατάστημα.
-
-2. Quality Check
-Μόλις το κατάστημα υπογράψει το συμβόλαιο και το προωθήσει πίσω στον πωλητή, τότε η ομάδα των Quality Check ελέγχει την εγκυρότητα των καταχωρημένων στοιχείων του καταστήματος και του υπογεγραμμένου συμβολαίου. Είναι πολύ σημαντικό όλα τα καταχωρημένα στοχεία του καταστήματος να είναι σωστά. Αν υπάρχει κάποιο λάθος, τότε το Quality Check team ζητάει από τους πωλητές να το διορθώσουν και μετά συνεχίζεται η διαδικασία.
-
-Όταν ολοκληρωθεί επιτυχώς το Quality check, τότε δημιουργείται αυτόματα το Backend account!
-
-3a. Menu processing & Photo listing
-Το Editorial Team αναλαμβάνει τις ενέργειες Menu processing & Photo listing. Πιο συγκεκριμένα:
-
-Menu processing:
-
-Λαμβάνουν το menu του καταστήματος
-
-Επικοινωνούν με το κατάστημα για διευκρινήσεις πάνω στον κατάλογο
-
-Καταχωρούν τον κατάλογο του καταστήματος στο backend
-
-Προωθούν τον δοκιμαστικό κατάλογο μέσω email στο κατάστημα
-
-Photo listing:
-
-Καταχωρούν το logo του καταστήματος στο backend
-
-3b. Shipment order
-Παράλληλα με το Menu processing, αν το κατάστημα είναι να ενεργοποιηθεί με εξοπλισμό παραγγελιοληψίας GoDroid, τότε γίνεται και η αποστολή του εξοπλισμού στο κατάστημα. Επομένως, το shipment order δεν γίνεται σε όλες τις περιπτώσεις ενεργοποίησης καταστημάτων!
-
-4. DH Pay approve
-Σε δεύτερο χρόνο στα πλαίσια της KYC διαδικασίας για τα φυσικά πρόσωπα, στέλνεται ένα SMS με αποστολέα την DH Pay στους εταίρους/μετόχους (με ποσοστό μετοχών > 25% ή ιδιοκτησιακού δικαιώματος > 25%) και στους νόμιμους εκπροσώπους, με ένα link στο οποίο θα χρειαστεί να ανεβάσουν:
-
-μια φωτογραφία selfie
-
-το ταυτοτικό τους έγγραφο (ταυτότητα ή διαβατήριο σε ισχύ)
-
-ένα αποδεικτικό κατοικίας (λογαριασμό σταθερής/κινητής τηλεφωνίας, λογαριασμό ρεύματος, ύδρευσης ή φυσικού αερίου)
-
-5. Onboarding
-Το Tech Support Team αναλαμβάνει το τελικό στάδιο της διαδικασίας, με στόχο να βγάλει το κατάστημα Live! Η διαδικασία διαφέρει, ανάλογα με το αν το κατάστημα είναι MP ή OD:
-
-marketplace:
-
-Δημιουργούν τον 1ου χάρτη εξυπηρέτησης
-
-Εγκαθιστούν απομακρυσμένα το σύστημα παραγγελιοληψίας στον εξοπλισμό του καταστήματος
-
-Εκπαιδεύουν απομακρυσμένα στον τρόπο λειτουργίας του συστήματος
-
-Αποστέλλουν δοκιμαστική παραγγελία
-
-Βγάζουν το κατάστημα Live!
-
-delivered by efood:
-
-Σετάρουν απομακρυσμένα την συσκευή στο κατάστημα
-
-Εκπαιδεύουν απομακρυσμένα στον τρόπο λειτουργίας του συστήματος
-
-Αποστέλλουν δοκιμαστική παραγγελία
-
-Βγάζουν το κατάστημα Live!
-
-2. Live Shop - Τηλεφωνικό κέντρο: 212 000 2575
-Customer Care
-Οποιοδήποτε θέμα σχετίζεται με τις παραγγελίες που έχει λάβει από τους χρήστες
-
-Επικοινωνία:
-
-Καθημερινά (Δ - Κ): Τηλεφωνικό κέντρο 07:00 - 04:00 (Τηλεφωνητής 1 → 1)
-
-Editorial Team
-H επικοινωνία με το editorial αφορά αλλαγές σε menu & χάρτη εξυπηρέτησης (MP)
-
-Επικοινωνία:
-
-Δ - Π: Τηλεφωνικό κέντρο 10:00 - 18:00 & backoffice 18:00 - 00:00
-
-ΣΚ & Αργίες: Mόνο backoffice 10:00 - 00:00
-
-Tech Support Team
-Η επικοινωνία γίνεται για θέματα εξοπλισμού (δεν εκτυπώνεται η παραγγελία, δεν ανοίγει το πρόγραμμα παραγγελιοληψίας, φαίνομαι κλειστός, κλπ.)
-
-Επικοινωνία:
-
-Δ - Π: Τηλεφωνικό κέντρο 09:30 - 18:00 & backoffice 18:00 - 00:00
-
-ΣΚ & Αργίες: Mόνο backoffice 10:00 - 00:00
-
-Billing Team
-Η επικοινωνία γίνεται για θέματα τιμολογήσεων, πιστωτικών, κλπ.
-
-Επικοινωνία:
-
-Δ - Π: Τηλεφωνικό κέντρο 09:00 - 17:00
-
-Sales Team
-Η επικοινωνία γίνεται θέματα συνεργασίας (λουκέτο, προμήθεια, γενικά παράπονα, κατάταξη), θέματα με φωτογραφίες, προωθητικές ενέργειες, κλπ.
-
-Επικοινωνία:
-
-Δ - Π: Δεν διαθέτει τηλεφωνικό κέντρο, δέχεται μόνο γραπτά αιτήματα (Salesforce cases & Asana Tasks) από τα υπόλοιπα τμήματα, δεν υπάρχει απευθείας τηλεφωνική γραμμή.
-'@
-
-$workspaceId = "efood-ops-demo"
-$documentId = "shop-journey"
-
-$headers = @{
-    "Content-Type"   = "application/json; charset=utf-8"
-    "X-Workspace-Id" = $workspaceId
+  return chunks;
 }
 
-$body = @{
-    documentId = $documentId
-    text       = $documentText
-} | ConvertTo-Json
+async function getEmbedding(text, apiKey) {
+  const response = await fetch(
+    `https://generativelanguage.googleapis.com/v1beta/models/gemini-embedding-001:embedContent?key=${apiKey}`,
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        model: "models/gemini-embedding-001",
+        content: { parts: [{ text }] },
+        outputDimensionality: 768,
+      }),
+    }
+  );
 
-$bodyBytes = [System.Text.Encoding]::UTF8.GetBytes($body)
+  const data = await response.json();
 
-Invoke-RestMethod -Uri "https://operations-portal-rag.giamarigkos.workers.dev/upload" -Method Post -Headers $headers -Body $bodyBytes
+  if (!data.embedding || !data.embedding.values) {
+    throw new Error("Embedding failed: " + JSON.stringify(data));
+  }
+
+  return data.embedding.values;
+}
+
+async function askGemini(context, question, apiKey) {
+  const prompt = `Απάντησε στην ερώτηση χρησιμοποιώντας ΜΟΝΟ τις παρακάτω πληροφορίες. Αν η απάντηση δεν βρίσκεται στις πληροφορίες, πες ότι δεν γνωρίζεις.
+
+Πληροφορίες:
+${context}
+
+Ερώτηση: ${question}`;
+
+  const response = await fetch(
+    `https://generativelanguage.googleapis.com/v1beta/models/gemini-3.6-flash:generateContent?key=${apiKey}`,
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        contents: [{ parts: [{ text: prompt }] }],
+      }),
+    }
+  );
+
+  const data = await response.json();
+
+  const answer = data?.candidates?.[0]?.content?.parts?.[0]?.text;
+  if (!answer) {
+    throw new Error("Gemini generation failed: " + JSON.stringify(data));
+  }
+
+  return answer;
+}
+
+async function handleUpload(request, env) {
+  const workspaceId = request.headers.get("X-Workspace-Id");
+  if (!workspaceId) {
+    return new Response(
+      JSON.stringify({ error: "Missing X-Workspace-Id header" }),
+      { status: 400, headers: JSON_HEADERS }
+    );
+  }
+
+  const body = await request.json();
+  const { documentId, text, volatility, sourceUrl } = body;
+
+  if (!documentId || !text) {
+    return new Response(
+      JSON.stringify({ error: "documentId and text are required" }),
+      { status: 400, headers: JSON_HEADERS }
+    );
+  }
+
+  const kvKey = `session:${workspaceId}:doc:${documentId}`;
+
+  const existingRaw = await env.DOCUMENT_REGISTRY.get(kvKey);
+  if (existingRaw) {
+    const existing = JSON.parse(existingRaw);
+    const idsToDelete = [];
+    for (let i = 0; i < existing.chunkCount; i++) {
+      idsToDelete.push(`${documentId}-chunk-${i}`);
+    }
+    await env.VECTORIZE.deleteByIds(idsToDelete);
+  }
+
+  const chunks = chunkText(text);
+
+  const vectors = [];
+  for (let i = 0; i < chunks.length; i++) {
+    const embedding = await getEmbedding(chunks[i], env.GEMINI_API_KEY);
+    vectors.push({
+      id: `${documentId}-chunk-${i}`,
+      values: embedding,
+      namespace: workspaceId,
+      metadata: {
+        documentId,
+        chunkIndex: i,
+        text: chunks[i],
+      },
+    });
+  }
+
+  await env.VECTORIZE.upsert(vectors);
+
+  await env.DOCUMENT_REGISTRY.put(
+    kvKey,
+    JSON.stringify({
+      chunkCount: chunks.length,
+      updatedAt: new Date().toISOString(),
+      volatility: volatility || null,
+      sourceUrl: sourceUrl || null,
+    })
+  );
+
+  return new Response(
+    JSON.stringify({ documentId, chunksCreated: chunks.length }),
+    { headers: JSON_HEADERS }
+  );
+}
+
+async function handleGetDocument(request, env, documentId) {
+  const workspaceId = request.headers.get("X-Workspace-Id");
+  if (!workspaceId) {
+    return new Response(
+      JSON.stringify({ error: "Missing X-Workspace-Id header" }),
+      { status: 400, headers: JSON_HEADERS }
+    );
+  }
+
+  const kvKey = `session:${workspaceId}:doc:${documentId}`;
+  const existingRaw = await env.DOCUMENT_REGISTRY.get(kvKey);
+
+  if (!existingRaw) {
+    return new Response(
+      JSON.stringify({ error: "Document not found" }),
+      { status: 404, headers: JSON_HEADERS }
+    );
+  }
+
+  const existing = JSON.parse(existingRaw);
+
+  const ids = [];
+  for (let i = 0; i < existing.chunkCount; i++) {
+    ids.push(`${documentId}-chunk-${i}`);
+  }
+
+  const result = await env.VECTORIZE.getByIds(ids);
+
+  const sorted = result.sort((a, b) => a.metadata.chunkIndex - b.metadata.chunkIndex);
+  const fullText = sorted.map((v) => v.metadata.text).join(" ");
+
+  return new Response(
+    JSON.stringify({
+      documentId,
+      chunkCount: existing.chunkCount,
+      updatedAt: existing.updatedAt,
+      sourceUrl: existing.sourceUrl || null,
+      text: fullText,
+    }),
+    { headers: JSON_HEADERS }
+  );
+}
+
+async function handleQuery(request, env) {
+  const workspaceId = request.headers.get("X-Workspace-Id");
+  if (!workspaceId) {
+    return new Response(
+      JSON.stringify({ error: "Missing X-Workspace-Id header" }),
+      { status: 400, headers: JSON_HEADERS }
+    );
+  }
+
+  const body = await request.json();
+  const { question } = body;
+
+  if (!question) {
+    return new Response(
+      JSON.stringify({ error: "question is required" }),
+      { status: 400, headers: JSON_HEADERS }
+    );
+  }
+
+  // Βήμα 1: embedding της ερώτησης
+  const questionEmbedding = await getEmbedding(question, env.GEMINI_API_KEY);
+
+  // Βήμα 2: semantic search στο Vectorize, μόνο μέσα στο σωστό workspace
+  const matches = await env.VECTORIZE.query(questionEmbedding, {
+    topK: TOP_K,
+    namespace: workspaceId,
+    returnMetadata: "all",
+  });
+
+  if (!matches.matches || matches.matches.length === 0) {
+    return new Response(
+      JSON.stringify({
+        answer: "Δεν βρέθηκαν σχετικά έγγραφα σε αυτόν τον χώρο εργασίας.",
+        isFallback: true,
+        primarySource: null,
+        relatedSections: [],
+      }),
+      { headers: JSON_HEADERS }
+    );
+  }
+
+  // Βήμα 3: χτίσε το context από τα πιο σχετικά chunks
+  const context = matches.matches
+    .map((m) => m.metadata.text)
+    .join("\n\n---\n\n");
+
+  // Βήμα 4: ρώτα το Gemini
+  const answer = await askGemini(context, question, env.GEMINI_API_KEY);
+
+  // Βήμα 5: εντόπισε αν η απάντηση είναι "δεν γνωρίζω" (fallback)
+  const normalizedAnswer = answer.toLowerCase();
+  const isFallback =
+    normalizedAnswer.includes("δεν γνωρίζω") ||
+    normalizedAnswer.includes("δε γνωρίζω");
+
+  // Βήμα 6: ταξινόμηση κατά score (το Vectorize συνήθως το κάνει ήδη, αλλά το εξασφαλίζουμε)
+  const sortedMatches = [...matches.matches].sort((a, b) => b.score - a.score);
+
+  function makePreview(text, maxWords = 18) {
+    const words = text.trim().split(/\s+/);
+    const preview = words.slice(0, maxWords).join(" ");
+    return words.length > maxWords ? preview + "…" : preview;
+  }
+
+  // Η πιο σχετική πηγή -- αυτή που "κουβαλάει" κυρίως την απάντηση
+  const topMatch = sortedMatches[0];
+
+  let primarySource = null;
+  if (!isFallback) {
+    // Βρες το sourceUrl του εγγράφου από το KV registry, για link προς το πρωτότυπο portal
+    const docKvKey = `session:${workspaceId}:doc:${topMatch.metadata.documentId}`;
+    const docRaw = await env.DOCUMENT_REGISTRY.get(docKvKey);
+    const docMeta = docRaw ? JSON.parse(docRaw) : {};
+
+    primarySource = {
+      documentId: topMatch.metadata.documentId,
+      chunkIndex: topMatch.metadata.chunkIndex,
+      score: topMatch.score,
+      text: topMatch.metadata.text,
+      sourceUrl: docMeta.sourceUrl || null,
+    };
+  }
+
+  // Οι υπόλοιπες -- σαν "Σχετικές ενότητες" προτάσεις για τον χρήστη
+  const relatedSections = isFallback
+    ? []
+    : sortedMatches.slice(1).map((m) => ({
+        documentId: m.metadata.documentId,
+        chunkIndex: m.metadata.chunkIndex,
+        score: m.score,
+        preview: makePreview(m.metadata.text),
+      }));
+
+  return new Response(
+    JSON.stringify({ answer, isFallback, primarySource, relatedSections }),
+    { headers: JSON_HEADERS }
+  );
+}
+
+export default {
+  async fetch(request, env) {
+    const url = new URL(request.url);
+
+    if (url.pathname === "/health") {
+      return new Response(
+        JSON.stringify({ status: "ok", message: "Operations Portal RAG is alive" }),
+        { headers: JSON_HEADERS }
+      );
+    }
+
+    if (url.pathname === "/upload" && request.method === "POST") {
+      return handleUpload(request, env);
+    }
+
+    if (url.pathname.startsWith("/document/") && request.method === "GET") {
+      const documentId = url.pathname.split("/document/")[1];
+      return handleGetDocument(request, env, documentId);
+    }
+
+    if (url.pathname === "/query" && request.method === "POST") {
+      return handleQuery(request, env);
+    }
+
+    return new Response("Not found", { status: 404 });
+  },
+};
