@@ -179,6 +179,38 @@ async function handleGetDocument(request, env, documentId) {
   );
 }
 
+async function handleListDocuments(request, env) {
+  const workspaceId = request.headers.get("X-Workspace-Id");
+  if (!workspaceId) {
+    return new Response(
+      JSON.stringify({ error: "Missing X-Workspace-Id header" }),
+      { status: 400, headers: JSON_HEADERS }
+    );
+  }
+
+  const prefix = `session:${workspaceId}:doc:`;
+  const list = await env.DOCUMENT_REGISTRY.list({ prefix });
+
+  const documents = await Promise.all(
+    list.keys.map(async (key) => {
+      const documentId = key.name.slice(prefix.length);
+      const raw = await env.DOCUMENT_REGISTRY.get(key.name);
+      const meta = raw ? JSON.parse(raw) : {};
+      return {
+        documentId,
+        chunkCount: meta.chunkCount,
+        updatedAt: meta.updatedAt,
+        sourceUrl: meta.sourceUrl || null,
+      };
+    })
+  );
+
+  return new Response(
+    JSON.stringify({ documents }),
+    { headers: JSON_HEADERS }
+  );
+}
+
 async function handleQuery(request, env) {
   const workspaceId = request.headers.get("X-Workspace-Id");
   if (!workspaceId) {
@@ -291,6 +323,10 @@ export default {
 
     if (url.pathname === "/upload" && request.method === "POST") {
       return handleUpload(request, env);
+    }
+
+    if (url.pathname === "/documents" && request.method === "GET") {
+      return handleListDocuments(request, env);
     }
 
     if (url.pathname.startsWith("/document/") && request.method === "GET") {

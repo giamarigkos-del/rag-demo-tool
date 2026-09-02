@@ -9,3 +9,7 @@ index_name = "operations-portal-rag-index"
 [[kv_namespaces]]
 binding = "DOCUMENT_REGISTRY"
 id = "e6ea2213cca7424b988d24d5307ee1ca"
+
+[assets]
+directory = "./public"
+not_found_handling = "none"

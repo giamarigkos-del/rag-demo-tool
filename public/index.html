@@ -1,0 +1,327 @@
+<!DOCTYPE html>
+<html lang="el">
+<head>
+<meta charset="UTF-8">
+<title>Operations Portal — Βοηθός Τεκμηρίωσης</title>
+<style>
+  :root{
+    --bg:#EDEDEC; --surface:#FFFFFF; --border:#D9D8D5;
+    --text:#241F31; --text-soft:#726F78;
+    --accent:#3568D4; --accent-soft:#EAF0FC;
+    --danger:#B3261E;
+  }
+  *{box-sizing:border-box;}
+  body{margin:0;font-family:-apple-system,"Segoe UI",Inter,sans-serif;background:var(--bg);color:var(--text);}
+
+  .host-nav{height:56px;background:var(--surface);border-bottom:1px solid var(--border);
+    display:flex;align-items:center;padding:0 28px;gap:28px;font-size:14px;color:var(--text-soft);}
+  .host-nav strong{color:var(--text);font-size:15px;}
+  .host-body{max-width:760px;margin:48px auto;padding:0 28px 260px;}
+  .host-body h1{font-size:26px;letter-spacing:-0.01em;margin-bottom:6px;}
+  .host-body p{font-size:14.5px;line-height:1.7;color:var(--text-soft);max-width:600px;}
+  .tag{display:inline-block;font-size:12px;background:var(--surface);border:1px solid var(--border);
+    padding:3px 9px;border-radius:20px;color:var(--text-soft);margin-top:14px;}
+
+  .launcher{position:fixed;right:28px;bottom:28px;width:48px;height:48px;border-radius:50%;
+    background:var(--text);color:#fff;display:flex;align-items:center;justify-content:center;
+    font-size:20px;box-shadow:2px 2px 0 rgba(36,31,49,.25);cursor:pointer;border:none;}
+
+  .window{position:fixed;right:28px;bottom:92px;width:540px;
+    background:var(--surface);border:1.5px solid var(--text);border-radius:12px;
+    box-shadow:5px 5px 0 rgba(36,31,49,.12);overflow:hidden;display:none;}
+  .window.open{display:block;}
+
+  .window-head{padding:12px 14px;display:flex;align-items:center;gap:10px;border-bottom:1px solid var(--border);}
+  .window-head strong{font-size:14px;}
+
+  .switcher{margin-left:auto;display:flex;background:#F1F1EF;border:1px solid var(--border);
+    border-radius:20px;padding:2px;font-size:12px;}
+  .switcher button{padding:5px 12px;border-radius:16px;cursor:pointer;color:var(--text-soft);
+    border:none;background:none;font-family:inherit;}
+  .switcher button.active{background:var(--surface);color:var(--text);border:1px solid var(--border);
+    box-shadow:0 1px 2px rgba(0,0,0,.06);}
+
+  .grid{display:grid;grid-template-columns:1.4fr 1fr;grid-template-rows:auto auto;gap:1px;
+    background:var(--border);}
+  .cell{background:var(--surface);padding:14px;}
+  .cell .label{font-size:11px;color:var(--text-soft);margin-bottom:8px;}
+
+  .chat-cell{grid-row:1/3;display:flex;flex-direction:column;gap:10px;height:340px;}
+  .thread{flex:1;overflow-y:auto;display:flex;flex-direction:column;gap:10px;}
+  .msg{font-size:13px;line-height:1.5;max-width:92%;}
+  .msg.user{align-self:flex-end;background:var(--accent-soft);color:var(--accent);padding:8px 11px;border-radius:10px 10px 2px 10px;}
+  .msg.bot{background:#F6F6F5;border:1px solid var(--border);padding:8px 11px;border-radius:2px 10px 10px 10px;}
+  .msg.bot.fallback{border-color:#E3B341;background:#FFF8EA;}
+  .composer{display:flex;gap:6px;}
+  .composer input{flex:1;border:1px solid var(--border);border-radius:8px;padding:8px 10px;font-size:13px;font-family:inherit;}
+  .composer button{border:none;background:var(--text);color:#fff;border-radius:8px;padding:0 12px;font-size:13px;cursor:pointer;}
+  .composer button:disabled{opacity:.5;cursor:default;}
+
+  .related-row{font-size:12.5px;padding:6px 0;border-bottom:1px solid var(--border);color:var(--text-soft);cursor:default;}
+  .related-row:last-child{border-bottom:none;}
+  .related-row strong{color:var(--text);display:block;font-size:12.5px;}
+  .empty-note{font-size:12px;color:var(--text-soft);}
+
+  .source-preview{font-size:12px;color:var(--text-soft);line-height:1.6;max-height:120px;overflow-y:auto;}
+
+  .upload-form{display:flex;flex-direction:column;gap:6px;height:100%;}
+  .upload-form input, .upload-form textarea{border:1px solid var(--border);border-radius:6px;
+    padding:6px 8px;font-size:12px;font-family:inherit;width:100%;}
+  .upload-form textarea{resize:vertical;min-height:60px;}
+  .upload-form button{border:none;background:var(--accent);color:#fff;border-radius:6px;
+    padding:6px 10px;font-size:12px;cursor:pointer;align-self:flex-start;}
+  .upload-form button:disabled{opacity:.5;cursor:default;}
+  .upload-status{font-size:11.5px;color:var(--text-soft);}
+
+  .status-list .status-row{display:flex;justify-content:space-between;font-size:12px;padding:4px 0;gap:8px;}
+  .ok{color:#1E8A5E;white-space:nowrap;}
+
+  .test-q input{width:100%;border:1px solid var(--border);border-radius:6px;padding:7px 9px;font-size:12px;font-family:inherit;margin-top:4px;}
+  .test-q pre{font-size:10.5px;background:#F6F6F5;border:1px solid var(--border);border-radius:6px;
+    padding:8px;margin-top:8px;max-height:110px;overflow:auto;white-space:pre-wrap;word-break:break-word;}
+</style>
+</head>
+<body>
+
+  <div class="host-nav"><strong>Operations Portal</strong><span>Διαδικασίες</span><span>Πρότυπα</span><span>Ανακοινώσεις</span></div>
+  <div class="host-body">
+    <h1>Διαδικασία έγκρισης προμηθειών</h1>
+    <p>Το παρόν έγγραφο περιγράφει τα βήματα έγκρισης για αιτήματα προμηθειών, τους εμπλεκόμενους ρόλους και τα χρονικά όρια ανά επίπεδο έγκρισης.</p>
+    <span class="tag">Ενημερώθηκε: 18 Αυγ 2026</span>
+  </div>
+
+  <button class="launcher" id="launcherBtn">✦</button>
+
+  <div class="window" id="chatWindow">
+    <div class="window-head">
+      <strong>Βοηθός Τεκμηρίωσης</strong>
+      <div class="switcher">
+        <button id="modeUserBtn" class="active">Συνομιλία</button>
+        <button id="modeEditorBtn">Επεξεργασία</button>
+      </div>
+    </div>
+
+    <div class="grid" id="userGrid">
+      <div class="cell chat-cell">
+        <div class="label">Συνομιλία</div>
+        <div class="thread" id="thread"></div>
+        <div class="composer">
+          <input type="text" id="questionInput" placeholder="Ρώτησε κάτι…">
+          <button id="askBtn">Στείλε</button>
+        </div>
+      </div>
+      <div class="cell">
+        <div class="label">Σχετικές ενότητες</div>
+        <div id="relatedCell"><div class="empty-note">Κάνε μια ερώτηση για να δεις σχετικές ενότητες.</div></div>
+      </div>
+      <div class="cell">
+        <div class="label" id="sourceLabel">Πηγή</div>
+        <div class="source-preview" id="sourceCell">—</div>
+      </div>
+    </div>
+
+    <div class="grid" id="editorGrid" style="display:none;">
+      <div class="cell chat-cell">
+        <div class="label">Ανέβασμα εγγράφου</div>
+        <form class="upload-form" id="uploadForm">
+          <input type="text" id="docId" placeholder="documentId (π.χ. politiki-adeion)" required>
+          <textarea id="docText" placeholder="Επικόλλησε εδώ το κείμενο του εγγράφου…" required></textarea>
+          <input type="text" id="docSourceUrl" placeholder="sourceUrl (προαιρετικό)">
+          <button type="submit" id="uploadBtn">Ανέβασμα</button>
+          <div class="upload-status" id="uploadStatus"></div>
+        </form>
+      </div>
+      <div class="cell">
+        <div class="label">Κατάσταση εγγράφων</div>
+        <div class="status-list" id="statusList">Φόρτωση…</div>
+      </div>
+      <div class="cell test-q">
+        <div class="label">Δοκιμαστικό ερώτημα</div>
+        <input type="text" id="testQInput" placeholder="π.χ. Ποιο είναι το όριο έγκρισης;">
+        <pre id="testQOutput"></pre>
+      </div>
+    </div>
+  </div>
+
+<script>
+  const WORKSPACE_ID = "efood-ops-demo";
+  const HEADERS = { "Content-Type": "application/json; charset=utf-8", "X-Workspace-Id": WORKSPACE_ID };
+
+  const el = (id) => document.getElementById(id);
+  const thread = el("thread");
+
+  // --- open / close & mode switch ---
+  el("launcherBtn").addEventListener("click", () => {
+    el("chatWindow").classList.toggle("open");
+  });
+  el("modeUserBtn").addEventListener("click", () => setMode("user"));
+  el("modeEditorBtn").addEventListener("click", () => setMode("editor"));
+
+  function setMode(mode) {
+    const isEditor = mode === "editor";
+    el("userGrid").style.display = isEditor ? "none" : "grid";
+    el("editorGrid").style.display = isEditor ? "grid" : "none";
+    el("modeUserBtn").classList.toggle("active", !isEditor);
+    el("modeEditorBtn").classList.toggle("active", isEditor);
+    if (isEditor) loadDocuments();
+  }
+
+  // --- chat ---
+  function escapeHtml(str) {
+    return str
+      .replace(/&/g, "&amp;")
+      .replace(/</g, "&lt;")
+      .replace(/>/g, "&gt;");
+  }
+
+  function formatAnswer(text) {
+    // 1) escape πρώτα, ώστε τυχόν "<" ή ">" μέσα στο κείμενο να μην ερμηνευτούν ως HTML
+    let safe = escapeHtml(text);
+    // 2) μετέτρεψε **έντονα** σε πραγματικό bold
+    safe = safe.replace(/\*\*(.+?)\*\*/g, "<strong>$1</strong>");
+    // 3) κράτησε τις αλλαγές γραμμής ορατές
+    safe = safe.replace(/\n/g, "<br>");
+    return safe;
+  }
+
+  function addMessage(text, role, fallback) {
+    const div = document.createElement("div");
+    div.className = "msg " + role + (fallback ? " fallback" : "");
+    if (role === "bot") {
+      div.innerHTML = formatAnswer(text);
+    } else {
+      div.textContent = text;
+    }
+    thread.appendChild(div);
+    thread.scrollTop = thread.scrollHeight;
+  }
+
+  async function askQuestion() {
+    const input = el("questionInput");
+    const question = input.value.trim();
+    if (!question) return;
+
+    addMessage(question, "user");
+    input.value = "";
+    el("askBtn").disabled = true;
+
+    try {
+      const res = await fetch("/query", {
+        method: "POST",
+        headers: HEADERS,
+        body: JSON.stringify({ question }),
+      });
+      const data = await res.json();
+
+      addMessage(data.answer, "bot", data.isFallback);
+      renderRelated(data.relatedSections || []);
+      renderSource(data.primarySource);
+    } catch (err) {
+      addMessage("Σφάλμα σύνδεσης: " + err.message, "bot", true);
+    } finally {
+      el("askBtn").disabled = false;
+    }
+  }
+
+  el("askBtn").addEventListener("click", askQuestion);
+  el("questionInput").addEventListener("keydown", (e) => {
+    if (e.key === "Enter") askQuestion();
+  });
+
+  function renderRelated(sections) {
+    const cell = el("relatedCell");
+    if (!sections.length) {
+      cell.innerHTML = '<div class="empty-note">Καμία επιπλέον σχετική ενότητα.</div>';
+      return;
+    }
+    cell.innerHTML = sections.map(s =>
+      `<div class="related-row"><strong>${s.documentId} · τμήμα ${s.chunkIndex}</strong>${s.preview}</div>`
+    ).join("");
+  }
+
+  function renderSource(source) {
+    const label = el("sourceLabel");
+    const cell = el("sourceCell");
+    if (!source) {
+      label.textContent = "Πηγή";
+      cell.textContent = "—";
+      return;
+    }
+    label.textContent = `Πηγή — ${source.documentId} · τμήμα ${source.chunkIndex}`;
+    cell.textContent = source.text + (source.sourceUrl ? `\n\n(${source.sourceUrl})` : "");
+  }
+
+  // --- editor: document status ---
+  async function loadDocuments() {
+    const list = el("statusList");
+    list.textContent = "Φόρτωση…";
+    try {
+      const res = await fetch("/documents", { headers: HEADERS });
+      const data = await res.json();
+      if (!data.documents || !data.documents.length) {
+        list.innerHTML = '<div class="empty-note">Δεν υπάρχουν έγγραφα ακόμα.</div>';
+        return;
+      }
+      list.innerHTML = data.documents.map(d =>
+        `<div class="status-row"><span>${d.documentId} (${d.chunkCount} τμήματα)</span><span class="ok">ενεργό</span></div>`
+      ).join("");
+    } catch (err) {
+      list.textContent = "Σφάλμα φόρτωσης: " + err.message;
+    }
+  }
+
+  // --- editor: upload ---
+  el("uploadForm").addEventListener("submit", async (e) => {
+    e.preventDefault();
+    const documentId = el("docId").value.trim();
+    const text = el("docText").value.trim();
+    const sourceUrl = el("docSourceUrl").value.trim();
+    const status = el("uploadStatus");
+    const btn = el("uploadBtn");
+
+    btn.disabled = true;
+    status.textContent = "Ανέβασμα…";
+
+    try {
+      const res = await fetch("/upload", {
+        method: "POST",
+        headers: HEADERS,
+        body: JSON.stringify({ documentId, text, sourceUrl: sourceUrl || undefined }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "Άγνωστο σφάλμα");
+
+      status.textContent = `✅ Δημιουργήθηκαν ${data.chunksCreated} τμήματα.`;
+      el("docId").value = "";
+      el("docText").value = "";
+      el("docSourceUrl").value = "";
+      loadDocuments();
+    } catch (err) {
+      status.textContent = "❌ " + err.message;
+    } finally {
+      btn.disabled = false;
+    }
+  });
+
+  // --- editor: test query ---
+  el("testQInput").addEventListener("keydown", async (e) => {
+    if (e.key !== "Enter") return;
+    const question = e.target.value.trim();
+    if (!question) return;
+    const out = el("testQOutput");
+    out.textContent = "Φόρτωση…";
+    try {
+      const res = await fetch("/query", {
+        method: "POST",
+        headers: HEADERS,
+        body: JSON.stringify({ question }),
+      });
+      const data = await res.json();
+      out.textContent = JSON.stringify(data, null, 2);
+    } catch (err) {
+      out.textContent = "Σφάλμα: " + err.message;
+    }
+  });
+</script>
+</body>
+</html>
