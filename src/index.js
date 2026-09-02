@@ -1,5 +1,5 @@
-const CHUNK_SIZE = 500;
-const CHUNK_OVERLAP = 50;
+const CHUNK_SIZE = 300;
+const CHUNK_OVERLAP = 30;
 const TOP_K = 4;
 const JSON_HEADERS = { "Content-Type": "application/json; charset=utf-8" };
 
@@ -210,7 +210,9 @@ async function handleQuery(request, env) {
     return new Response(
       JSON.stringify({
         answer: "Δεν βρέθηκαν σχετικά έγγραφα σε αυτόν τον χώρο εργασίας.",
-        sourcesUsed: [],
+        isFallback: true,
+        primarySource: null,
+        relatedSections: [],
       }),
       { headers: JSON_HEADERS }
     );
@@ -224,15 +226,44 @@ async function handleQuery(request, env) {
   // Βήμα 4: ρώτα το Gemini
   const answer = await askGemini(context, question, env.GEMINI_API_KEY);
 
-  // Βήμα 5: ποια sources χρησιμοποιήθηκαν (χρήσιμο για διαφάνεια/debugging)
-  const sourcesUsed = matches.matches.map((m) => ({
-    documentId: m.metadata.documentId,
-    chunkIndex: m.metadata.chunkIndex,
-    score: m.score,
-  }));
+  // Βήμα 5: εντόπισε αν η απάντηση είναι "δεν γνωρίζω" (fallback)
+  const normalizedAnswer = answer.toLowerCase();
+  const isFallback =
+    normalizedAnswer.includes("δεν γνωρίζω") ||
+    normalizedAnswer.includes("δε γνωρίζω");
+
+  // Βήμα 6: ταξινόμηση κατά score (το Vectorize συνήθως το κάνει ήδη, αλλά το εξασφαλίζουμε)
+  const sortedMatches = [...matches.matches].sort((a, b) => b.score - a.score);
+
+  function makePreview(text, maxWords = 18) {
+    const words = text.trim().split(/\s+/);
+    const preview = words.slice(0, maxWords).join(" ");
+    return words.length > maxWords ? preview + "…" : preview;
+  }
+
+  // Η πιο σχετική πηγή -- αυτή που "κουβαλάει" κυρίως την απάντηση
+  const topMatch = sortedMatches[0];
+  const primarySource = isFallback
+    ? null
+    : {
+        documentId: topMatch.metadata.documentId,
+        chunkIndex: topMatch.metadata.chunkIndex,
+        score: topMatch.score,
+        text: topMatch.metadata.text,
+      };
+
+  // Οι υπόλοιπες -- σαν "Σχετικές ενότητες" προτάσεις για τον χρήστη
+  const relatedSections = isFallback
+    ? []
+    : sortedMatches.slice(1).map((m) => ({
+        documentId: m.metadata.documentId,
+        chunkIndex: m.metadata.chunkIndex,
+        score: m.score,
+        preview: makePreview(m.metadata.text),
+      }));
 
   return new Response(
-    JSON.stringify({ answer, sourcesUsed }),
+    JSON.stringify({ answer, isFallback, primarySource, relatedSections }),
     { headers: JSON_HEADERS }
   );
 }
