@@ -9,11 +9,19 @@
   .host-nav{height:56px;background:var(--surface);border-bottom:1px solid var(--border);
     display:flex;align-items:center;padding:0 28px;gap:28px;font-size:14px;color:var(--text-soft);}
   .host-nav strong{color:var(--text);font-size:15px;}
-  .host-body{max-width:760px;margin:48px auto;padding:0 28px 260px;}
-  .host-body h1{font-size:26px;letter-spacing:-0.01em;margin-bottom:6px;}
-  .host-body p{font-size:14.5px;line-height:1.7;color:var(--text-soft);max-width:600px;}
-  .tag{display:inline-block;font-size:12px;background:var(--surface);border:1px solid var(--border);
-    padding:3px 9px;border-radius:20px;color:var(--text-soft);margin-top:14px;}
+  .host-body{max-width:920px;margin:48px auto;padding:0 28px 260px;}
+  .host-body h1{font-size:22px;letter-spacing:-0.01em;margin-bottom:6px;}
+  .host-body .host-intro{font-size:14px;line-height:1.6;color:var(--text-soft);max-width:600px;margin-bottom:28px;}
+
+  .doc-grid{display:grid;grid-template-columns:repeat(auto-fill, minmax(260px, 1fr));gap:16px;}
+  .doc-card{display:block;background:var(--surface);border:1px solid var(--border);border-radius:8px;
+    padding:18px;text-decoration:none;color:inherit;transition:border-color .15s;}
+  .doc-card:hover{border-color:var(--accent);}
+  .doc-card h3{font-size:15px;margin:0 0 6px;color:var(--text);}
+  .doc-card-date{font-size:11.5px;color:var(--text-soft);display:block;margin-bottom:10px;}
+  .doc-card-preview{font-size:13px;line-height:1.6;color:var(--text-soft);
+    display:-webkit-box;-webkit-line-clamp:3;-webkit-box-orient:vertical;overflow:hidden;}
+  .host-empty{font-size:13.5px;color:var(--text-soft);}
 
   .launcher{position:fixed;right:28px;bottom:28px;width:48px;height:48px;border-radius:50%;
     background:var(--accent);color:var(--on-accent);display:flex;align-items:center;justify-content:center;
@@ -76,9 +84,9 @@
 
   <div class="host-nav"><strong>Operations Portal</strong><span>Διαδικασίες</span><span>Πρότυπα</span><span>Ανακοινώσεις</span></div>
   <div class="host-body">
-    <h1>Διαδικασία έγκρισης προμηθειών</h1>
-    <p>Το παρόν έγγραφο περιγράφει τα βήματα έγκρισης για αιτήματα προμηθειών, τους εμπλεκόμενους ρόλους και τα χρονικά όρια ανά επίπεδο έγκρισης.</p>
-    <span class="tag">Ενημερώθηκε: 18 Αυγ 2026</span>
+    <h1>Πρόσφατα έγγραφα</h1>
+    <p class="host-intro">Διαδικασίες και πολιτικές της εταιρείας. Κάνε κλικ σε ένα έγγραφο για να το διαβάσεις, ή ρώτησε τον βοηθό κάτω-δεξιά.</p>
+    <div class="doc-grid" id="docGrid"><div class="host-empty">Φόρτωση…</div></div>
   </div>
 
   <button class="launcher" id="launcherBtn">✦</button>
@@ -113,6 +121,33 @@
 <script>
   const el = (id) => document.getElementById(id);
   const thread = el("thread");
+
+  // --- host page: δυναμική λίστα εγγράφων (πραγματικά δεδομένα, όχι στατικό demo κείμενο) ---
+  async function loadHostDocuments() {
+    const grid = el("docGrid");
+    try {
+      const res = await fetch("/documents", { headers: HEADERS });
+      const data = await res.json();
+      const documents = data.documents || [];
+
+      if (!documents.length) {
+        grid.innerHTML = '<div class="host-empty">Δεν υπάρχουν έγγραφα ακόμα σε αυτόν τον χώρο εργασίας.</div>';
+        return;
+      }
+
+      grid.innerHTML = documents.map(d => `
+        <a class="doc-card" href="/article.html?id=${encodeURIComponent(d.documentId)}">
+          <h3>${escapeHtml(d.title || d.documentId)}</h3>
+          <span class="doc-card-date">Ενημερώθηκε ${timeAgo(d.updatedAt)}</span>
+          <div class="doc-card-preview">${escapeHtml(d.preview || "")}</div>
+        </a>
+      `).join("");
+    } catch (err) {
+      grid.innerHTML = '<div class="host-empty">Σφάλμα φόρτωσης εγγράφων.</div>';
+    }
+  }
+
+  loadHostDocuments();
 
   el("launcherBtn").addEventListener("click", () => {
     el("chatWindow").classList.toggle("open");
