@@ -1,0 +1,81 @@
+<!DOCTYPE html>
+<html lang="el">
+<head>
+<meta charset="UTF-8">
+<title>Άρθρο — Βοηθός Τεκμηρίωσης</title>
+<link rel="icon" type="image/svg+xml" href="/favicon.svg">
+<link rel="stylesheet" href="/shared.css">
+<style>
+  .article-nav{height:56px;background:var(--surface);border-bottom:1px solid var(--border);
+    display:flex;align-items:center;padding:0 28px;}
+  .back-link{font-size:13px;color:var(--text-soft);text-decoration:none;}
+  .back-link:hover{color:var(--accent);}
+  .article-body{max-width:700px;margin:48px auto;padding:0 28px 120px;}
+  .article-body h1{font-size:28px;letter-spacing:-0.01em;margin-bottom:10px;}
+  .tag{display:inline-block;font-size:12px;background:var(--surface);border:1px solid var(--border);
+    padding:3px 9px;border-radius:20px;color:var(--text-soft);margin-bottom:32px;}
+  .article-content{font-size:15px;line-height:1.75;color:var(--text);}
+  .article-content p{margin:0 0 18px;}
+  .state-note{font-size:14px;color:var(--text-soft);padding:40px 0;}
+</style>
+</head>
+<body>
+  <div class="article-nav">
+    <a class="back-link" href="/">← Πίσω στο portal</a>
+  </div>
+  <div class="article-body" id="articleBody">
+    <div class="state-note">Φόρτωση…</div>
+  </div>
+
+<script src="/shared.js"></script>
+<script>
+  const el = (id) => document.getElementById(id);
+  const params = new URLSearchParams(window.location.search);
+  const documentId = params.get("id");
+
+  const GREEK_MONTHS = ["Ιαν","Φεβ","Μαρ","Απρ","Μαι","Ιουν","Ιουλ","Αυγ","Σεπ","Οκτ","Νοε","Δεκ"];
+
+  function formatDate(iso) {
+    if (!iso) return "";
+    const d = new Date(iso);
+    if (isNaN(d)) return "";
+    return `${d.getDate()} ${GREEK_MONTHS[d.getMonth()]} ${d.getFullYear()}`;
+  }
+
+  function renderBody(text) {
+    const escaped = escapeHtml(text);
+    const paragraphs = escaped.split(/\n\s*\n/).map(p => p.trim()).filter(Boolean);
+    if (!paragraphs.length) return `<p>${escaped}</p>`;
+    return paragraphs.map(p => `<p>${p.replace(/\n/g, "<br>")}</p>`).join("");
+  }
+
+  async function loadArticle() {
+    const container = el("articleBody");
+
+    if (!documentId) {
+      container.innerHTML = '<div class="state-note">Δεν βρέθηκε αναγνωριστικό εγγράφου.</div>';
+      return;
+    }
+
+    try {
+      const res = await fetch(`/document/${encodeURIComponent(documentId)}`, { headers: HEADERS });
+      if (!res.ok) {
+        container.innerHTML = '<div class="state-note">Το έγγραφο δεν βρέθηκε.</div>';
+        return;
+      }
+      const data = await res.json();
+
+      container.innerHTML = `
+        <h1>${escapeHtml(data.title || data.documentId)}</h1>
+        <span class="tag">Ενημερώθηκε: ${formatDate(data.updatedAt)}</span>
+        <div class="article-content">${renderBody(data.text || "")}</div>
+      `;
+    } catch (err) {
+      container.innerHTML = '<div class="state-note">Σφάλμα φόρτωσης: ' + escapeHtml(err.message) + '</div>';
+    }
+  }
+
+  loadArticle();
+</script>
+</body>
+</html>
