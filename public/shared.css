@@ -1,0 +1,10 @@
+:root{
+  --bg:#15151c; --surface:#1e1e26; --border:#34343f;
+  --text:#E8E7EC; --text-soft:#9C9AA8;
+  --accent:#7C6FEF; --accent-soft:#26213D;
+  --danger:#E5646B; --surface-2:#242430;
+  --warn-border:#D9A441; --warn-bg:#3A2F14; --ok:#4FAE7C; --on-accent:#F5F4FB;
+}
+*{box-sizing:border-box;}
+body{margin:0;font-family:-apple-system,"Segoe UI",Inter,sans-serif;background:var(--bg);color:var(--text);}
+input,textarea,button{font-family:inherit;}

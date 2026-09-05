@@ -1,3 +1,4 @@
 node_modules/
 .wrangler/
 .env
+node-v22.19.0-win-x64/

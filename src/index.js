@@ -70,6 +70,12 @@ ${context}
   return answer;
 }
 
+function makePreview(text, maxWords = 18) {
+  const words = text.trim().split(/\s+/);
+  const preview = words.slice(0, maxWords).join(" ");
+  return words.length > maxWords ? preview + "…" : preview;
+}
+
 async function handleUpload(request, env) {
   const workspaceId = request.headers.get("X-Workspace-Id");
   if (!workspaceId) {
@@ -80,7 +86,7 @@ async function handleUpload(request, env) {
   }
 
   const body = await request.json();
-  const { documentId, text, volatility, sourceUrl } = body;
+  const { documentId, text, title, volatility, sourceUrl } = body;
 
   if (!documentId || !text) {
     return new Response(
@@ -120,13 +126,20 @@ async function handleUpload(request, env) {
 
   await env.VECTORIZE.upsert(vectors);
 
+  // Αποθηκεύουμε το κείμενο όπως ακριβώς το έστειλε ο editor (παράγραφοι,
+  // κενές γραμμές, τίτλοι -- ό,τι δομή είχε ήδη) μία φορά, αυτούσιο.
+  // Το chunking παραπάνω παραμένει ξεχωριστό και χρησιμεύει ΜΟΝΟ για
+  // embeddings/αναζήτηση -- ποτέ πια δεν το χρησιμοποιούμε για να δείξουμε
+  // κείμενο σε άνθρωπο.
   await env.DOCUMENT_REGISTRY.put(
     kvKey,
     JSON.stringify({
+      title: title || null,
       chunkCount: chunks.length,
       updatedAt: new Date().toISOString(),
       volatility: volatility || null,
       sourceUrl: sourceUrl || null,
+      fullText: text,
     })
   );
 
@@ -157,19 +170,29 @@ async function handleGetDocument(request, env, documentId) {
 
   const existing = JSON.parse(existingRaw);
 
-  const ids = [];
-  for (let i = 0; i < existing.chunkCount; i++) {
-    ids.push(`${documentId}-chunk-${i}`);
+  // Διαβάζουμε απευθείας το αυτούσιο κείμενο από το KV -- καμία ανακατασκευή
+  // από chunks πλέον, άρα καμία απώλεια δομής (παράγραφοι, κενές γραμμές κ.λπ.).
+  //
+  // Fallback: έγγραφα που ανέβηκαν ΠΡΙΝ αυτή την αλλαγή δεν έχουν ακόμα
+  // αποθηκευμένο fullText. Γι' αυτά κάνουμε την παλιά ανακατασκευή από τα
+  // chunks, ώστε να μη σπάσουν -- μέχρι να ξανα-ανέβουν και να αποκτήσουν
+  // κανονικό fullText.
+  let fullText = existing.fullText;
+
+  if (!fullText) {
+    const ids = [];
+    for (let i = 0; i < existing.chunkCount; i++) {
+      ids.push(`${documentId}-chunk-${i}`);
+    }
+    const result = await env.VECTORIZE.getByIds(ids);
+    const sorted = result.sort((a, b) => a.metadata.chunkIndex - b.metadata.chunkIndex);
+    fullText = sorted.map((v) => v.metadata.text).join(" ");
   }
-
-  const result = await env.VECTORIZE.getByIds(ids);
-
-  const sorted = result.sort((a, b) => a.metadata.chunkIndex - b.metadata.chunkIndex);
-  const fullText = sorted.map((v) => v.metadata.text).join(" ");
 
   return new Response(
     JSON.stringify({
       documentId,
+      title: existing.title || null,
       chunkCount: existing.chunkCount,
       updatedAt: existing.updatedAt,
       sourceUrl: existing.sourceUrl || null,
@@ -198,17 +221,97 @@ async function handleListDocuments(request, env) {
       const meta = raw ? JSON.parse(raw) : {};
       return {
         documentId,
+        title: meta.title || null,
         chunkCount: meta.chunkCount,
         updatedAt: meta.updatedAt,
         sourceUrl: meta.sourceUrl || null,
+        // ΝΕΟ: μικρό απόσπασμα του περιεχομένου, ώστε ο editor να αναγνωρίζει
+        // το έγγραφο "με το μάτι" στη λίστα, όχι μόνο από τον τίτλο/documentId.
+        // Reuse του ήδη υπάρχοντος makePreview() -- τίποτα καινούριο.
+        preview: meta.fullText ? makePreview(meta.fullText) : "",
       };
     })
   );
+
+  // Πιο πρόσφατα ενημερωμένα πρώτα -- προεπιλεγμένη ταξινόμηση για το
+  // editor dashboard (αυτό που άγγιξες τελευταία είναι το πιο πιθανό
+  // να ψάχνεις τώρα).
+  documents.sort((a, b) => new Date(b.updatedAt || 0) - new Date(a.updatedAt || 0));
 
   return new Response(
     JSON.stringify({ documents }),
     { headers: JSON_HEADERS }
   );
+}
+
+async function handleSearchDocuments(request, env) {
+  const workspaceId = request.headers.get("X-Workspace-Id");
+  if (!workspaceId) {
+    return new Response(
+      JSON.stringify({ error: "Missing X-Workspace-Id header" }),
+      { status: 400, headers: JSON_HEADERS }
+    );
+  }
+
+  const body = await request.json();
+  const { query } = body;
+
+  if (!query) {
+    return new Response(
+      JSON.stringify({ error: "query is required" }),
+      { status: 400, headers: JSON_HEADERS }
+    );
+  }
+
+  // Ίδιο search με το /query, αλλά topK μεγαλύτερο -- θέλουμε αρκετά chunks
+  // ώστε να καλύψουμε πολλά διαφορετικά έγγραφα, όχι μόνο το κορυφαίο ένα.
+  const queryEmbedding = await getEmbedding(query, env.GEMINI_API_KEY);
+  const matches = await env.VECTORIZE.query(queryEmbedding, {
+    topK: 12,
+    namespace: workspaceId,
+    returnMetadata: "all",
+  });
+
+  if (!matches.matches || matches.matches.length === 0) {
+    return new Response(JSON.stringify({ documents: [] }), { headers: JSON_HEADERS });
+  }
+
+  // Ομαδοποίηση chunks ανά έγγραφο -- κρατάμε μόνο το καλύτερο score
+  // και το καλύτερο απόσπασμα (preview) ανά documentId.
+  const byDocument = new Map();
+  for (const m of matches.matches) {
+    const docId = m.metadata.documentId;
+    const existing = byDocument.get(docId);
+    if (!existing || m.score > existing.score) {
+      byDocument.set(docId, { score: m.score, text: m.metadata.text });
+    }
+  }
+
+  const docMetaCache = new Map();
+  async function getDocMeta(documentId) {
+    if (docMetaCache.has(documentId)) return docMetaCache.get(documentId);
+    const docKvKey = `session:${workspaceId}:doc:${documentId}`;
+    const docRaw = await env.DOCUMENT_REGISTRY.get(docKvKey);
+    const meta = docRaw ? JSON.parse(docRaw) : {};
+    docMetaCache.set(documentId, meta);
+    return meta;
+  }
+
+  const grouped = [...byDocument.entries()].sort((a, b) => b[1].score - a[1].score);
+
+  const documents = await Promise.all(
+    grouped.slice(0, 5).map(async ([documentId, info]) => {
+      const meta = await getDocMeta(documentId);
+      return {
+        documentId,
+        title: meta.title || null,
+        score: info.score,
+        preview: makePreview(info.text),
+      };
+    })
+  );
+
+  return new Response(JSON.stringify({ documents }), { headers: JSON_HEADERS });
 }
 
 async function handleQuery(request, env) {
@@ -269,10 +372,15 @@ async function handleQuery(request, env) {
   // Βήμα 6: ταξινόμηση κατά score (το Vectorize συνήθως το κάνει ήδη, αλλά το εξασφαλίζουμε)
   const sortedMatches = [...matches.matches].sort((a, b) => b.score - a.score);
 
-  function makePreview(text, maxWords = 18) {
-    const words = text.trim().split(/\s+/);
-    const preview = words.slice(0, maxWords).join(" ");
-    return words.length > maxWords ? preview + "…" : preview;
+  // Μικρό cache ώστε να μη διαβάζουμε το ίδιο έγγραφο δύο φορές από το KV
+  const docMetaCache = new Map();
+  async function getDocMeta(documentId) {
+    if (docMetaCache.has(documentId)) return docMetaCache.get(documentId);
+    const docKvKey = `session:${workspaceId}:doc:${documentId}`;
+    const docRaw = await env.DOCUMENT_REGISTRY.get(docKvKey);
+    const meta = docRaw ? JSON.parse(docRaw) : {};
+    docMetaCache.set(documentId, meta);
+    return meta;
   }
 
   // Η πιο σχετική πηγή -- αυτή που "κουβαλάει" κυρίως την απάντηση
@@ -280,13 +388,11 @@ async function handleQuery(request, env) {
 
   let primarySource = null;
   if (!isFallback) {
-    // Βρες το sourceUrl του εγγράφου από το KV registry, για link προς το πρωτότυπο portal
-    const docKvKey = `session:${workspaceId}:doc:${topMatch.metadata.documentId}`;
-    const docRaw = await env.DOCUMENT_REGISTRY.get(docKvKey);
-    const docMeta = docRaw ? JSON.parse(docRaw) : {};
+    const docMeta = await getDocMeta(topMatch.metadata.documentId);
 
     primarySource = {
       documentId: topMatch.metadata.documentId,
+      title: docMeta.title || null,
       chunkIndex: topMatch.metadata.chunkIndex,
       score: topMatch.score,
       text: topMatch.metadata.text,
@@ -297,12 +403,18 @@ async function handleQuery(request, env) {
   // Οι υπόλοιπες -- σαν "Σχετικές ενότητες" προτάσεις για τον χρήστη
   const relatedSections = isFallback
     ? []
-    : sortedMatches.slice(1).map((m) => ({
-        documentId: m.metadata.documentId,
-        chunkIndex: m.metadata.chunkIndex,
-        score: m.score,
-        preview: makePreview(m.metadata.text),
-      }));
+    : await Promise.all(
+        sortedMatches.slice(1).map(async (m) => {
+          const docMeta = await getDocMeta(m.metadata.documentId);
+          return {
+            documentId: m.metadata.documentId,
+            title: docMeta.title || null,
+            chunkIndex: m.metadata.chunkIndex,
+            score: m.score,
+            preview: makePreview(m.metadata.text),
+          };
+        })
+      );
 
   return new Response(
     JSON.stringify({ answer, isFallback, primarySource, relatedSections }),
@@ -330,8 +442,23 @@ export default {
     }
 
     if (url.pathname.startsWith("/document/") && request.method === "GET") {
-      const documentId = url.pathname.split("/document/")[1];
+      // Safety net: αν το documentId περιέχει κενά ή ειδικούς χαρακτήρες
+      // (π.χ. "Verification process" -> "Verification%20process" στο URL),
+      // αποκωδικοποιούμε πριν το χρησιμοποιήσουμε ως KV key. Χωρίς αυτό,
+      // το lookup αποτυγχάνει σιωπηλά με "Document not found" ακόμα κι όταν
+      // το έγγραφο υπάρχει.
+      const rawId = url.pathname.split("/document/")[1];
+      let documentId = rawId;
+      try {
+        documentId = decodeURIComponent(rawId);
+      } catch (err) {
+        // Αν το decode αποτύχει (κατεστραμμένη ακολουθία), προχωράμε με το raw.
+      }
       return handleGetDocument(request, env, documentId);
+    }
+
+    if (url.pathname === "/search-documents" && request.method === "POST") {
+      return handleSearchDocuments(request, env);
     }
 
     if (url.pathname === "/query" && request.method === "POST") {
