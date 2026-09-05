@@ -4,6 +4,7 @@ const TOP_K = 4;
 const JSON_HEADERS = { "Content-Type": "application/json; charset=utf-8" };
 const MAX_UPLOAD_WORDS = 8000;
 const MAX_UPLOAD_BYTES = 2 * 1024 * 1024;
+const FALLBACK_TTL_SECONDS = 60 * 60 * 24 * 7; // 7 ημέρες
 
 function chunkText(text) {
   const words = text.trim().split(/\s+/);
@@ -76,6 +77,18 @@ function makePreview(text, maxWords = 18) {
   const words = text.trim().split(/\s+/);
   const preview = words.slice(0, maxWords).join(" ");
   return words.length > maxWords ? preview + "…" : preview;
+}
+
+// Καταγράφει μια ερώτηση που δεν βρήκε απάντηση, με αυτόματη λήξη μετά
+// από FALLBACK_TTL_SECONDS -- καμία ενεργή διαδικασία καθαρισμού δεν
+// χρειάζεται, το KV το κάνει μόνο του (passive TTL, όχι background cron).
+async function logFallbackQuestion(env, workspaceId, question) {
+  const key = `session:${workspaceId}:fallback:${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+  await env.DOCUMENT_REGISTRY.put(
+    key,
+    JSON.stringify({ question, timestamp: new Date().toISOString() }),
+    { expirationTtl: FALLBACK_TTL_SECONDS }
+  );
 }
 
 async function handleUpload(request, env) {
@@ -361,6 +374,7 @@ async function handleQuery(request, env) {
   });
 
   if (!matches.matches || matches.matches.length === 0) {
+    await logFallbackQuestion(env, workspaceId, question);
     return new Response(
       JSON.stringify({
         answer: "Δεν βρέθηκαν σχετικά έγγραφα σε αυτόν τον χώρο εργασίας.",
@@ -385,6 +399,10 @@ async function handleQuery(request, env) {
   const isFallback =
     normalizedAnswer.includes("δεν γνωρίζω") ||
     normalizedAnswer.includes("δε γνωρίζω");
+
+  if (isFallback) {
+    await logFallbackQuestion(env, workspaceId, question);
+  }
 
   // Βήμα 6: ταξινόμηση κατά score (το Vectorize συνήθως το κάνει ήδη, αλλά το εξασφαλίζουμε)
   const sortedMatches = [...matches.matches].sort((a, b) => b.score - a.score);
@@ -439,6 +457,39 @@ async function handleQuery(request, env) {
   );
 }
 
+async function handleGetFallbackQuestions(request, env) {
+  const workspaceId = request.headers.get("X-Workspace-Id");
+  if (!workspaceId) {
+    return new Response(
+      JSON.stringify({ error: "Missing X-Workspace-Id header" }),
+      { status: 400, headers: JSON_HEADERS }
+    );
+  }
+
+  const prefix = `session:${workspaceId}:fallback:`;
+  const list = await env.DOCUMENT_REGISTRY.list({ prefix });
+
+  const questions = await Promise.all(
+    list.keys.map(async (key) => {
+      const raw = await env.DOCUMENT_REGISTRY.get(key.name);
+      if (!raw) return null;
+      const parsed = JSON.parse(raw);
+      return { question: parsed.question, timestamp: parsed.timestamp };
+    })
+  );
+
+  // Πιο πρόσφατες πρώτα -- αυτό που ρωτήθηκε τελευταία είναι το πιο
+  // πιθανό να θέλεις να δεις πρώτο.
+  const cleaned = questions
+    .filter(Boolean)
+    .sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));
+
+  return new Response(
+    JSON.stringify({ questions: cleaned }),
+    { headers: JSON_HEADERS }
+  );
+}
+
 export default {
   async fetch(request, env) {
     const url = new URL(request.url);
@@ -480,6 +531,10 @@ export default {
 
     if (url.pathname === "/query" && request.method === "POST") {
       return handleQuery(request, env);
+    }
+
+    if (url.pathname === "/fallback-questions" && request.method === "GET") {
+      return handleGetFallbackQuestions(request, env);
     }
 
     return new Response("Not found", { status: 404 });

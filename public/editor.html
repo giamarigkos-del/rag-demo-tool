@@ -25,6 +25,11 @@
   .sidebar-section{padding:14px 16px;}
   .sidebar-section.grow{flex:1;overflow-y:auto;min-height:0;border-top:1px solid var(--border);border-bottom:1px solid var(--border);}
   .label{font-size:11px;color:var(--text-soft);margin-bottom:8px;text-transform:uppercase;letter-spacing:.02em;}
+  .label-row{display:flex;align-items:center;justify-content:space-between;margin-bottom:8px;}
+  .label-row .label{margin-bottom:0;}
+  .refresh-btn{border:none;background:none;color:var(--accent);font-size:11.5px;cursor:pointer;padding:0;
+    text-transform:none;letter-spacing:0;}
+  .refresh-btn:hover{text-decoration:underline;}
 
   .new-doc-btn{width:100%;border:none;background:var(--accent);color:var(--on-accent);
     border-radius:6px;padding:10px;font-size:13px;cursor:pointer;font-weight:600;}
@@ -46,6 +51,11 @@
   .search-result-row:hover{background:var(--surface-2);}
   .search-result-row strong{display:block;color:var(--text);font-size:12.5px;}
   .search-result-row span{color:var(--text-soft);}
+
+  .fallback-row{font-size:12.5px;padding:7px 6px;border-bottom:1px solid var(--border);color:var(--text);
+    line-height:1.5;}
+  .fallback-row:last-child{border-bottom:none;}
+  .fq-time{font-size:11px;color:var(--text-soft);display:block;margin-top:2px;}
 
   .test-q{padding:14px 16px;flex-shrink:0;}
   .test-q input{width:100%;border:1px solid var(--border);border-radius:6px;padding:7px 9px;font-size:12px;margin-top:4px;}
@@ -138,6 +148,13 @@
         <div class="label">Δοκιμαστικό ερώτημα</div>
         <input type="text" id="testQInput" placeholder="π.χ. Ποιο είναι το όριο έγκρισης;">
         <div id="testQOutput"></div>
+      </div>
+      <div class="sidebar-section">
+        <div class="label-row">
+          <div class="label">Ερωτήσεις χωρίς απάντηση</div>
+          <button type="button" class="refresh-btn" id="refreshFallbackBtn">↻ Ανανέωση</button>
+        </div>
+        <div id="fallbackList">Φόρτωση…</div>
       </div>
     </div>
 
@@ -235,6 +252,31 @@
       results.textContent = "Σφάλμα: " + err.message;
     }
   });
+
+  // --- ερωτήσεις χωρίς απάντηση (Section E) ---
+  async function loadFallbackQuestions() {
+    const list = el("fallbackList");
+    list.textContent = "Φόρτωση…";
+    try {
+      const res = await fetch("/fallback-questions", { headers: HEADERS });
+      const data = await res.json();
+      const questions = data.questions || [];
+      if (!questions.length) {
+        list.innerHTML = '<div class="empty-note">Καμία ερώτηση χωρίς απάντηση.</div>';
+        return;
+      }
+      list.innerHTML = questions.map(q => `
+        <div class="fallback-row">
+          ${escapeHtml(q.question)}
+          <span class="fq-time">${timeAgo(q.timestamp)}</span>
+        </div>
+      `).join("");
+    } catch (err) {
+      list.textContent = "Σφάλμα: " + err.message;
+    }
+  }
+
+  el("refreshFallbackBtn").addEventListener("click", loadFallbackQuestions);
 
   // --- preview (πρώτο βήμα, πάντα, πριν το edit) ---
   async function openPreview(documentId) {
@@ -502,6 +544,9 @@
       });
       const data = await res.json();
       renderTestQResult(data);
+      // Ο agent μόλις κατέγραψε αυτό το ερώτημα ως fallback (αν ήταν) --
+      // ανανεώνουμε τη λίστα ώστε να το δεις αμέσως, χωρίς χειροκίνητο κλικ.
+      if (data.isFallback) loadFallbackQuestions();
     } catch (err) {
       out.innerHTML = `<div class="empty-note">❌ ${escapeHtml(err.message)}</div>`;
     }
@@ -529,6 +574,7 @@
   }
 
   loadDocuments();
+  loadFallbackQuestions();
 </script>
 </body>
 </html>
