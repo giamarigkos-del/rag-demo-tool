@@ -97,6 +97,7 @@
   .diff-nochange{font-size:13px;color:var(--text-soft);}
 
   .slug-hint{font-size:11.5px;color:var(--text-soft);margin-top:-2px;}
+  .upload-limit-hint{font-size:11.5px;color:var(--text-soft);margin-top:-2px;}
 
   /* Σε στενές οθόνες, το sidebar (σταθερό πλάτος) σπρώχνει το main panel
      εκτός οθόνης -- εδώ το κύριο panel πάει ΚΑΤΩ από το sidebar αντί
@@ -320,6 +321,7 @@
         <input type="text" id="docTitle" placeholder="Τίτλος (π.χ. Πολιτική αδειών)" required>
         <div class="slug-hint" id="slugHint"></div>
         <textarea id="docText" required></textarea>
+        <div class="upload-limit-hint">Μέγιστο: ~8.000 λέξεις ή 2MB</div>
         <input type="text" id="docSourceUrl" placeholder="sourceUrl (προαιρετικό)">
         <button type="submit" id="uploadBtn">${isExisting ? "Ενημέρωση" : "Ανέβασμα"}</button>
         <div class="upload-status" id="uploadStatus"></div>

@@ -2,6 +2,8 @@ const CHUNK_SIZE = 300;
 const CHUNK_OVERLAP = 30;
 const TOP_K = 4;
 const JSON_HEADERS = { "Content-Type": "application/json; charset=utf-8" };
+const MAX_UPLOAD_WORDS = 8000;
+const MAX_UPLOAD_BYTES = 2 * 1024 * 1024;
 
 function chunkText(text) {
   const words = text.trim().split(/\s+/);
@@ -91,6 +93,21 @@ async function handleUpload(request, env) {
   if (!documentId || !text) {
     return new Response(
       JSON.stringify({ error: "documentId and text are required" }),
+      { status: 400, headers: JSON_HEADERS }
+    );
+  }
+
+  // Όριο μεγέθους -- προστασία δημόσιου demo από ακραία/κατά λάθος μεγάλα
+  // uploads. Ελέγχεται ΠΡΙΝ το chunking/embedding, ώστε να μη σπαταλάμε
+  // κλήσεις στο Gemini για κείμενο που θα απορριφθεί ούτως ή άλλως.
+  const wordCount = text.trim().split(/\s+/).filter(Boolean).length;
+  const byteSize = new TextEncoder().encode(text).length;
+
+  if (wordCount > MAX_UPLOAD_WORDS || byteSize > MAX_UPLOAD_BYTES) {
+    return new Response(
+      JSON.stringify({
+        error: `Το κείμενο ξεπερνά το επιτρεπτό όριο (μέγιστο ${MAX_UPLOAD_WORDS} λέξεις ή 2MB). Το έγγραφο έχει ${wordCount} λέξεις (${(byteSize / 1024 / 1024).toFixed(2)}MB).`,
+      }),
       { status: 400, headers: JSON_HEADERS }
     );
   }
