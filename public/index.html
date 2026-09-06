@@ -127,7 +127,9 @@
     try {
       const res = await fetch("/documents", { headers: HEADERS });
       const data = await res.json();
-      const documents = data.documents || [];
+      // Section D: ο απλός χρήστης βλέπει ΜΟΝΟ δημοσιευμένα έγγραφα -- τα
+      // πρόχειρα/διαγραμμένα υπάρχουν μόνο στο editor.
+      const documents = (data.documents || []).filter(d => d.status === "published");
 
       if (!documents.length) {
         grid.innerHTML = '<div class="host-empty">Δεν υπάρχουν έγγραφα ακόμα σε αυτόν τον χώρο εργασίας.</div>';

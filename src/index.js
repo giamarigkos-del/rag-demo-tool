@@ -128,33 +128,46 @@ async function handleUpload(request, env) {
   const kvKey = `session:${workspaceId}:doc:${documentId}`;
 
   const existingRaw = await env.DOCUMENT_REGISTRY.get(kvKey);
-  if (existingRaw) {
-    const existing = JSON.parse(existingRaw);
+  const existing = existingRaw ? JSON.parse(existingRaw) : null;
+
+  // Section D: νέο έγγραφο -> ξεκινάει πάντα ως "draft" (κανείς εκτός από
+  // τον editor δεν το βλέπει, δεν μπαίνει καν στο Vectorize ακόμα -- γλιτώνουμε
+  // τις κλήσεις Gemini μέχρι να δημοσιευτεί ρητά). Υπάρχον έγγραφο -> κρατάει
+  // το status που είχε ήδη (παλιά έγγραφα χωρίς πεδίο status θεωρούνται ήδη
+  // δημοσιευμένα, για συμβατότητα προς τα πίσω).
+  const status = existing ? (existing.status || "published") : "draft";
+
+  if (existing) {
     const idsToDelete = [];
-    for (let i = 0; i < existing.chunkCount; i++) {
+    for (let i = 0; i < (existing.chunkCount || 0); i++) {
       idsToDelete.push(`${documentId}-chunk-${i}`);
     }
-    await env.VECTORIZE.deleteByIds(idsToDelete);
+    if (idsToDelete.length) await env.VECTORIZE.deleteByIds(idsToDelete);
   }
 
-  const chunks = chunkText(text);
+  let chunkCount = 0;
 
-  const vectors = [];
-  for (let i = 0; i < chunks.length; i++) {
-    const embedding = await getEmbedding(chunks[i], env.GEMINI_API_KEY);
-    vectors.push({
-      id: `${documentId}-chunk-${i}`,
-      values: embedding,
-      namespace: workspaceId,
-      metadata: {
-        documentId,
-        chunkIndex: i,
-        text: chunks[i],
-      },
-    });
+  if (status === "published") {
+    const chunks = chunkText(text);
+    const vectors = [];
+    for (let i = 0; i < chunks.length; i++) {
+      const embedding = await getEmbedding(chunks[i], env.GEMINI_API_KEY);
+      vectors.push({
+        id: `${documentId}-chunk-${i}`,
+        values: embedding,
+        namespace: workspaceId,
+        metadata: {
+          documentId,
+          chunkIndex: i,
+          text: chunks[i],
+        },
+      });
+    }
+    await env.VECTORIZE.upsert(vectors);
+    chunkCount = chunks.length;
   }
-
-  await env.VECTORIZE.upsert(vectors);
+  // status "draft" ή "deleted" -- καμία δουλειά στο Vectorize, το έγγραφο
+  // δεν είναι (ακόμα) αναζητήσιμο από το bot.
 
   // Αποθηκεύουμε το κείμενο όπως ακριβώς το έστειλε ο editor (παράγραφοι,
   // κενές γραμμές, τίτλοι -- ό,τι δομή είχε ήδη) μία φορά, αυτούσιο.
@@ -165,16 +178,17 @@ async function handleUpload(request, env) {
     kvKey,
     JSON.stringify({
       title: title || null,
-      chunkCount: chunks.length,
+      chunkCount,
       updatedAt: new Date().toISOString(),
       volatility: volatility || null,
       sourceUrl: sourceUrl || null,
       fullText: text,
+      status,
     })
   );
 
   return new Response(
-    JSON.stringify({ documentId, chunksCreated: chunks.length }),
+    JSON.stringify({ documentId, status, chunksCreated: chunkCount }),
     { headers: JSON_HEADERS }
   );
 }
@@ -226,6 +240,7 @@ async function handleGetDocument(request, env, documentId) {
       chunkCount: existing.chunkCount,
       updatedAt: existing.updatedAt,
       sourceUrl: existing.sourceUrl || null,
+      status: existing.status || "published",
       text: fullText,
     }),
     { headers: JSON_HEADERS }
@@ -255,6 +270,7 @@ async function handleListDocuments(request, env) {
         chunkCount: meta.chunkCount,
         updatedAt: meta.updatedAt,
         sourceUrl: meta.sourceUrl || null,
+        status: meta.status || "published",
         // ΝΕΟ: μικρό απόσπασμα του περιεχομένου, ώστε ο editor να αναγνωρίζει
         // το έγγραφο "με το μάτι" στη λίστα, όχι μόνο από τον τίτλο/documentId.
         // Reuse του ήδη υπάρχοντος makePreview() -- τίποτα καινούριο.
@@ -490,6 +506,134 @@ async function handleGetFallbackQuestions(request, env) {
   );
 }
 
+// Section D: "Δημοσίευση" -- παίρνει το ήδη αποθηκευμένο fullText ενός
+// πρόχειρου εγγράφου και κάνει (τώρα πρώτη φορά) chunking + embeddings +
+// upsert στο Vectorize. Ίδιο ακριβώς μοτίβο με το /upload, απλά χωρίς νέο
+// κείμενο -- ο χρήστης απλά εγκρίνει αυτό που ήδη έγραψε.
+async function handlePublishDocument(request, env, documentId) {
+  const workspaceId = request.headers.get("X-Workspace-Id");
+  if (!workspaceId) {
+    return new Response(
+      JSON.stringify({ error: "Missing X-Workspace-Id header" }),
+      { status: 400, headers: JSON_HEADERS }
+    );
+  }
+
+  const kvKey = `session:${workspaceId}:doc:${documentId}`;
+  const raw = await env.DOCUMENT_REGISTRY.get(kvKey);
+  if (!raw) {
+    return new Response(
+      JSON.stringify({ error: "Document not found" }),
+      { status: 404, headers: JSON_HEADERS }
+    );
+  }
+
+  const doc = JSON.parse(raw);
+
+  // Defensive καθάρισμα -- κανονικά δεν θα υπάρχουν ήδη vectors αφού ήταν
+  // draft, αλλά δεν κοστίζει τίποτα να το εξασφαλίσουμε.
+  if (doc.chunkCount) {
+    const idsToDelete = [];
+    for (let i = 0; i < doc.chunkCount; i++) idsToDelete.push(`${documentId}-chunk-${i}`);
+    await env.VECTORIZE.deleteByIds(idsToDelete);
+  }
+
+  const chunks = chunkText(doc.fullText || "");
+  const vectors = [];
+  for (let i = 0; i < chunks.length; i++) {
+    const embedding = await getEmbedding(chunks[i], env.GEMINI_API_KEY);
+    vectors.push({
+      id: `${documentId}-chunk-${i}`,
+      values: embedding,
+      namespace: workspaceId,
+      metadata: { documentId, chunkIndex: i, text: chunks[i] },
+    });
+  }
+  await env.VECTORIZE.upsert(vectors);
+
+  doc.status = "published";
+  doc.chunkCount = chunks.length;
+  doc.publishedAt = new Date().toISOString();
+
+  await env.DOCUMENT_REGISTRY.put(kvKey, JSON.stringify(doc));
+
+  return new Response(
+    JSON.stringify({ documentId, status: "published", chunksCreated: chunks.length }),
+    { headers: JSON_HEADERS }
+  );
+}
+
+// Section D: "Διαγραφή" (soft-delete) -- σβήνει τα vectors (το bot σταματάει
+// αμέσως να το ξέρει) αλλά ΔΕΝ σβήνει το KV record, ώστε να υπάρχει "Undo".
+async function handleDeleteDocument(request, env, documentId) {
+  const workspaceId = request.headers.get("X-Workspace-Id");
+  if (!workspaceId) {
+    return new Response(
+      JSON.stringify({ error: "Missing X-Workspace-Id header" }),
+      { status: 400, headers: JSON_HEADERS }
+    );
+  }
+
+  const kvKey = `session:${workspaceId}:doc:${documentId}`;
+  const raw = await env.DOCUMENT_REGISTRY.get(kvKey);
+  if (!raw) {
+    return new Response(
+      JSON.stringify({ error: "Document not found" }),
+      { status: 404, headers: JSON_HEADERS }
+    );
+  }
+
+  const doc = JSON.parse(raw);
+
+  if (doc.chunkCount) {
+    const idsToDelete = [];
+    for (let i = 0; i < doc.chunkCount; i++) idsToDelete.push(`${documentId}-chunk-${i}`);
+    await env.VECTORIZE.deleteByIds(idsToDelete);
+  }
+
+  doc.status = "deleted";
+  doc.chunkCount = 0;
+
+  await env.DOCUMENT_REGISTRY.put(kvKey, JSON.stringify(doc));
+
+  return new Response(
+    JSON.stringify({ documentId, status: "deleted" }),
+    { headers: JSON_HEADERS }
+  );
+}
+
+// Section D: "Επαναφορά" -- ξαναφέρνει ένα διαγραμμένο έγγραφο σαν πρόχειρο.
+// Σκόπιμα ΔΕΝ το ξαναδημοσιεύει αυτόματα -- ο χρήστης πρέπει να πατήσει
+// ρητά "Δημοσίευση" ξανά, ώστε να μην ξαναγίνει κάτι ζωντανό χωρίς έλεγχο.
+async function handleRestoreDocument(request, env, documentId) {
+  const workspaceId = request.headers.get("X-Workspace-Id");
+  if (!workspaceId) {
+    return new Response(
+      JSON.stringify({ error: "Missing X-Workspace-Id header" }),
+      { status: 400, headers: JSON_HEADERS }
+    );
+  }
+
+  const kvKey = `session:${workspaceId}:doc:${documentId}`;
+  const raw = await env.DOCUMENT_REGISTRY.get(kvKey);
+  if (!raw) {
+    return new Response(
+      JSON.stringify({ error: "Document not found" }),
+      { status: 404, headers: JSON_HEADERS }
+    );
+  }
+
+  const doc = JSON.parse(raw);
+  doc.status = "draft";
+
+  await env.DOCUMENT_REGISTRY.put(kvKey, JSON.stringify(doc));
+
+  return new Response(
+    JSON.stringify({ documentId, status: "draft" }),
+    { headers: JSON_HEADERS }
+  );
+}
+
 export default {
   async fetch(request, env) {
     const url = new URL(request.url);
@@ -507,6 +651,23 @@ export default {
 
     if (url.pathname === "/documents" && request.method === "GET") {
       return handleListDocuments(request, env);
+    }
+
+    if (url.pathname.startsWith("/document/") && request.method === "POST") {
+      const rawTail = url.pathname.split("/document/")[1] || "";
+      const segments = rawTail.split("/");
+      if (segments.length === 2) {
+        let documentId = segments[0];
+        try {
+          documentId = decodeURIComponent(documentId);
+        } catch (err) {
+          // κρατάμε το raw αν το decode αποτύχει
+        }
+        const action = segments[1];
+        if (action === "publish") return handlePublishDocument(request, env, documentId);
+        if (action === "delete") return handleDeleteDocument(request, env, documentId);
+        if (action === "restore") return handleRestoreDocument(request, env, documentId);
+      }
     }
 
     if (url.pathname.startsWith("/document/") && request.method === "GET") {

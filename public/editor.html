@@ -46,6 +46,22 @@
     text-overflow:ellipsis;white-space:nowrap;}
   .empty-note{font-size:12px;color:var(--text-soft);}
 
+  .status-badge{display:inline-block;font-size:10px;font-weight:700;padding:2px 7px;
+    border-radius:10px;margin-left:6px;vertical-align:middle;white-space:nowrap;}
+  .status-badge.draft{background:var(--warn-bg);color:var(--warn-border);border:1px solid var(--warn-border);}
+  .status-badge.deleted{background:rgba(229,100,107,.12);color:var(--danger);border:1px solid var(--danger);}
+
+  .deleted-toggle{border:none;background:none;color:var(--accent);font-size:11.5px;cursor:pointer;
+    padding:8px 0 0;text-align:left;width:100%;}
+  .deleted-toggle:hover{text-decoration:underline;}
+  .deleted-row{font-size:12.5px;padding:7px 6px;border-bottom:1px solid var(--border);
+    display:flex;align-items:center;justify-content:space-between;gap:8px;}
+  .deleted-row:last-child{border-bottom:none;}
+  .deleted-row span{color:var(--text-soft);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+  .deleted-row button{border:1px solid var(--border);background:var(--surface-2);color:var(--text);
+    border-radius:4px;padding:4px 9px;font-size:11px;font-weight:600;cursor:pointer;white-space:nowrap;}
+  .deleted-row button:hover{border-color:var(--accent);background:var(--accent-soft);}
+
   .search-result-row{font-size:12.5px;padding:7px 6px;border-radius:6px;cursor:pointer;}
   .search-result-row:hover{background:var(--surface-2);}
   .search-result-row strong{display:block;color:var(--text);font-size:12.5px;}
@@ -82,6 +98,8 @@
   .preview-actions{margin-top:20px;display:flex;gap:10px;}
   .preview-actions button{border:none;background:var(--accent);color:var(--on-accent);
     border-radius:6px;padding:9px 18px;font-size:13px;cursor:pointer;font-weight:600;}
+  .preview-actions button.btn-danger{background:none;border:1px solid var(--danger);color:var(--danger);}
+  .preview-actions button.btn-danger:hover{background:var(--danger);color:var(--on-accent);}
 
   .edit-form{display:flex;flex-direction:column;gap:8px;max-width:760px;}
   .form-header{display:flex;align-items:center;justify-content:space-between;margin-bottom:4px;}
@@ -155,6 +173,8 @@
       <div class="sidebar-section grow">
         <div class="label">Έγγραφα</div>
         <div id="docList">Φόρτωση…</div>
+        <button type="button" class="deleted-toggle" id="deletedToggleBtn" style="display:none;"></button>
+        <div id="deletedList" style="display:none;"></div>
       </div>
       <div class="sidebar-section">
         <div class="label">Βρες με περιγραφή</div>
@@ -208,31 +228,87 @@
   function renderDocList() {
     const list = el("docList");
     const filterVal = el("docFilterInput").value.trim().toLowerCase();
+    // Section D: τα διαγραμμένα δεν εμφανίζονται εδώ -- έχουν το δικό τους
+    // ξεχωριστό, κρυμμένο section παρακάτω (βλ. renderDeletedList).
+    const visibleDocs = allDocuments.filter(d => d.status !== "deleted");
     const filtered = !filterVal
-      ? allDocuments
-      : allDocuments.filter(d =>
+      ? visibleDocs
+      : visibleDocs.filter(d =>
           (d.title || "").toLowerCase().includes(filterVal) ||
           d.documentId.toLowerCase().includes(filterVal)
         );
 
     if (!filtered.length) {
-      list.innerHTML = `<div class="empty-note">${allDocuments.length ? "Κανένα αποτέλεσμα." : "Δεν υπάρχουν έγγραφα ακόμα."}</div>`;
+      list.innerHTML = `<div class="empty-note">${visibleDocs.length ? "Κανένα αποτέλεσμα." : "Δεν υπάρχουν έγγραφα ακόμα."}</div>`;
+    } else {
+      list.innerHTML = filtered.map(d => `
+        <div class="doc-row${d.documentId === currentSelectedId ? " active" : ""}" data-id="${escapeHtml(d.documentId)}">
+          <div class="doc-row-top">
+            <strong>${escapeHtml(d.title || d.documentId)}</strong>
+            <span class="doc-time">${timeAgo(d.updatedAt)}</span>
+          </div>
+          <div class="doc-row-preview">${escapeHtml(d.preview || "")}${d.status === "draft" ? '<span class="status-badge draft">Πρόχειρο</span>' : ""}</div>
+        </div>
+      `).join("");
+
+      list.querySelectorAll(".doc-row").forEach(row => {
+        row.addEventListener("click", () => openPreview(row.dataset.id));
+      });
+    }
+
+    renderDeletedList();
+  }
+
+  // --- Section D: διαγραμμένα (soft-deleted) -- κρυμμένα by default,
+  // με ένα toggle link για να τα δεις/τα επαναφέρεις ---
+  let showDeleted = false;
+
+  function renderDeletedList() {
+    const deleted = allDocuments.filter(d => d.status === "deleted");
+    const toggleBtn = el("deletedToggleBtn");
+    const listEl = el("deletedList");
+
+    if (!deleted.length) {
+      toggleBtn.style.display = "none";
+      listEl.style.display = "none";
       return;
     }
 
-    list.innerHTML = filtered.map(d => `
-      <div class="doc-row${d.documentId === currentSelectedId ? " active" : ""}" data-id="${escapeHtml(d.documentId)}">
-        <div class="doc-row-top">
-          <strong>${escapeHtml(d.title || d.documentId)}</strong>
-          <span class="doc-time">${timeAgo(d.updatedAt)}</span>
-        </div>
-        <div class="doc-row-preview">${escapeHtml(d.preview || "")}</div>
-      </div>
-    `).join("");
+    toggleBtn.style.display = "block";
+    toggleBtn.textContent = `${showDeleted ? "Απόκρυψη" : "Δες"} διαγραμμένα (${deleted.length})`;
+    listEl.style.display = showDeleted ? "block" : "none";
 
-    list.querySelectorAll(".doc-row").forEach(row => {
-      row.addEventListener("click", () => openPreview(row.dataset.id));
-    });
+    if (showDeleted) {
+      listEl.innerHTML = deleted.map(d => `
+        <div class="deleted-row" data-id="${escapeHtml(d.documentId)}">
+          <span>${escapeHtml(d.title || d.documentId)}</span>
+          <button type="button" class="restore-btn" data-id="${escapeHtml(d.documentId)}">Επαναφορά</button>
+        </div>
+      `).join("");
+
+      listEl.querySelectorAll(".restore-btn").forEach(btn => {
+        btn.addEventListener("click", () => restoreDocument(btn.dataset.id));
+      });
+    }
+  }
+
+  el("deletedToggleBtn").addEventListener("click", () => {
+    showDeleted = !showDeleted;
+    renderDeletedList();
+  });
+
+  async function restoreDocument(documentId) {
+    try {
+      const res = await fetch(`/document/${encodeURIComponent(documentId)}/restore`, {
+        method: "POST",
+        headers: HEADERS,
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "Αποτυχία επαναφοράς");
+      await loadDocuments();
+    } catch (err) {
+      alert("Σφάλμα επαναφοράς: " + err.message);
+    }
   }
 
   el("docFilterInput").addEventListener("input", renderDocList);
@@ -316,6 +392,8 @@
     if (data.updatedAt) metaParts.push(`Ενημερώθηκε ${timeAgo(data.updatedAt)}`);
     if (data.chunkCount != null) metaParts.push(`${data.chunkCount} τμήματα`);
 
+    const isDraft = data.status === "draft";
+
     main.innerHTML = `
       <div class="preview-head">
         <h2></h2>
@@ -327,9 +405,13 @@
       <div class="preview-body"></div>
       <div class="preview-actions">
         <button type="button" id="editFromPreviewBtn">Επεξεργασία</button>
+        ${isDraft ? '<button type="button" id="publishBtn">Δημοσίευση</button>' : ""}
+        <button type="button" class="btn-danger" id="deleteBtn">Διαγραφή</button>
       </div>
     `;
-    main.querySelector(".preview-head h2").textContent = data.title || data.documentId;
+    main.querySelector(".preview-head h2").innerHTML =
+      escapeHtml(data.title || data.documentId) +
+      (isDraft ? '<span class="status-badge draft">Πρόχειρο</span>' : "");
     el("previewMetaText").textContent = metaParts.join(" · ");
     main.querySelector(".preview-body").innerHTML = renderMarkdown(data.text || "");
 
@@ -343,6 +425,48 @@
     }
 
     el("editFromPreviewBtn").addEventListener("click", () => enterEditMode(data));
+
+    if (isDraft) {
+      el("publishBtn").addEventListener("click", async () => {
+        const btn = el("publishBtn");
+        btn.disabled = true;
+        btn.textContent = "Δημοσίευση…";
+        try {
+          const res = await fetch(`/document/${encodeURIComponent(data.documentId)}/publish`, {
+            method: "POST",
+            headers: HEADERS,
+          });
+          const result = await res.json();
+          if (!res.ok) throw new Error(result.error || "Αποτυχία δημοσίευσης");
+          await loadDocuments();
+          openPreview(data.documentId);
+        } catch (err) {
+          alert("Σφάλμα δημοσίευσης: " + err.message);
+          btn.disabled = false;
+          btn.textContent = "Δημοσίευση";
+        }
+      });
+    }
+
+    el("deleteBtn").addEventListener("click", async () => {
+      if (!confirm(`Διαγραφή του εγγράφου "${data.title || data.documentId}"; Μπορείς να το επαναφέρεις αργότερα.`)) return;
+      const btn = el("deleteBtn");
+      btn.disabled = true;
+      try {
+        const res = await fetch(`/document/${encodeURIComponent(data.documentId)}/delete`, {
+          method: "POST",
+          headers: HEADERS,
+        });
+        const result = await res.json();
+        if (!res.ok) throw new Error(result.error || "Αποτυχία διαγραφής");
+        currentSelectedId = null;
+        await loadDocuments();
+        el("mainPanel").innerHTML = '<div class="main-placeholder">Επίλεξε ένα έγγραφο από τα αριστερά, ή δημιούργησε νέο.</div>';
+      } catch (err) {
+        alert("Σφάλμα διαγραφής: " + err.message);
+        btn.disabled = false;
+      }
+    });
   }
 
   // --- edit mode (ρητό κλικ, ποτέ αυτόματα) ---
@@ -388,7 +512,8 @@
         <div class="live-preview-label">Προεπισκόπηση</div>
         <div class="live-preview" id="livePreview"></div>
         <input type="text" id="docSourceUrl" placeholder="sourceUrl (προαιρετικό)">
-        <button type="submit" id="uploadBtn">${isExisting ? "Ενημέρωση" : "Ανέβασμα"}</button>
+        <button type="submit" id="uploadBtn">${isExisting ? "Ενημέρωση" : "Αποθήκευση ως πρόχειρο"}</button>
+        ${isExisting ? "" : '<div class="upload-limit-hint">Θα χρειαστεί να πατήσεις "Δημοσίευση" μετά, για να γίνει ζωντανό.</div>'}
         <div class="upload-status" id="uploadStatus"></div>
       </form>
       <div class="diff-view" id="diffView">

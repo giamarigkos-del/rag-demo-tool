@@ -65,6 +65,13 @@
       }
       const data = await res.json();
 
+      // Section D: αν κάποιος ανοίξει link σε πρόχειρο/διαγραμμένο έγγραφο
+      // (π.χ. παλιό bookmark), δεν δείχνουμε το κείμενο -- δεν έχει εγκριθεί.
+      if (data.status && data.status !== "published") {
+        container.innerHTML = '<div class="state-note">Αυτό το έγγραφο δεν έχει δημοσιευτεί ακόμα.</div>';
+        return;
+      }
+
       container.innerHTML = `
         <h1>${escapeHtml(data.title || data.documentId)}</h1>
         <span class="tag">Ενημερώθηκε: ${formatDate(data.updatedAt)}</span>
