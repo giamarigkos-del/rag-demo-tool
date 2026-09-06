@@ -34,9 +34,11 @@
 
   .window-head{padding:12px 14px;display:flex;align-items:center;gap:10px;border-bottom:1px solid var(--border);}
   .window-head strong{font-size:14px;}
-  .editor-link{margin-left:auto;font-size:11.5px;font-weight:700;color:var(--text);text-decoration:none;
+  .editor-link{font-size:11.5px;font-weight:700;color:var(--text);text-decoration:none;
     background:var(--surface-2);border:1px solid var(--border);border-radius:4px;padding:5px 10px;}
   .editor-link:hover{background:var(--accent-soft);border-color:var(--accent);}
+  .host-nav-right{margin-left:auto;display:flex;align-items:center;gap:10px;}
+  .host-nav-right .lang-toggle{margin-left:0;}
 
   .label{font-size:11px;color:var(--text-soft);margin-bottom:8px;}
 
@@ -74,11 +76,13 @@
 
   <div class="host-nav">
     <strong>Operations Portal</strong>
-    <a class="editor-link" id="switchModeLink" href="#" data-i18n="switchMode">Switch mode</a>
-    <a class="editor-link" href="/editor.html" data-i18n="manageContent">Manage content</a>
-    <div class="lang-toggle" id="langToggle">
-      <button type="button" class="lang-btn" data-lang="en">EN</button>
-      <button type="button" class="lang-btn" data-lang="el">GR</button>
+    <div class="host-nav-right">
+      <a class="editor-link" id="switchModeLink" href="#" data-i18n="switchMode">Switch mode</a>
+      <a class="editor-link" href="/editor.html" data-i18n="manageContent">Manage content</a>
+      <div class="lang-toggle" id="langToggle">
+        <button type="button" class="lang-btn" data-lang="en">EN</button>
+        <button type="button" class="lang-btn" data-lang="el">GR</button>
+      </div>
     </div>
   </div>
   <div class="host-body">
