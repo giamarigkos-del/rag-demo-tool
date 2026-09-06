@@ -1,4 +1,17 @@
-const WORKSPACE_ID = "efood-ops-demo";
+// Κάθε επισκέπτης διαλέγει ρητά, στη landing page, "Developer" (με κωδικό,
+// πάει στο πραγματικό demo workspace) ή "Επισκέπτης/Guest" (παίρνει ένα
+// τυχαίο, δικό του, απομονωμένο workspace). Η επιλογή αποθηκεύεται εδώ
+// (localStorage) ώστε να μη ρωτάει ξανά στο ίδιο browser. Αν δεν έχει γίνει
+// ακόμα καμία επιλογή, στέλνουμε στη landing page πριν φορτώσει οτιδήποτε
+// άλλο -- δεν έχει νόημα να καλέσουμε το backend χωρίς workspace.
+function resolveWorkspaceId() {
+  const stored = localStorage.getItem("workspaceId");
+  if (stored) return stored;
+  window.location.href = "/landing.html";
+  return null;
+}
+
+const WORKSPACE_ID = resolveWorkspaceId();
 const HEADERS = { "Content-Type": "application/json; charset=utf-8", "X-Workspace-Id": WORKSPACE_ID };
 
 function escapeHtml(str) {
@@ -71,4 +84,15 @@ function timeAgo(iso) {
   if (months < 12) return `πριν ${months} ${months === 1 ? "μήνα" : "μήνες"}`;
   const years = Math.floor(months / 12);
   return `πριν ${years} ${years === 1 ? "χρόνο" : "χρόνια"}`;
+}
+
+// "Λήγει σε 3 ημέρες" -- μόνο για έγγραφα επισκεπτών (workspaces εκτός του
+// προστατευμένου), όπου κάθε ανενεργό έγγραφο έχει αυτόματη λήξη. Επιστρέφει
+// null όταν δεν υπάρχει expiresAt, ώστε το frontend να μη δείξει τίποτα.
+function expiryLabel(expiresAt) {
+  if (!expiresAt) return null;
+  const diffMs = new Date(expiresAt).getTime() - Date.now();
+  const days = Math.max(0, Math.floor(diffMs / (1000 * 60 * 60 * 24)));
+  if (days === 0) return "Λήγει σήμερα";
+  return `Λήγει σε ${days} ${days === 1 ? "ημέρα" : "ημέρες"}`;
 }

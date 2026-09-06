@@ -1,0 +1,122 @@
+<!DOCTYPE html>
+<html lang="el">
+<head>
+<meta charset="UTF-8">
+<title>Operations Portal — Καλωσόρισες</title>
+<link rel="icon" type="image/svg+xml" href="/favicon.svg">
+<link rel="stylesheet" href="/shared.css">
+<style>
+  body{display:flex;align-items:center;justify-content:center;min-height:100vh;padding:24px;}
+  .landing-box{max-width:420px;width:100%;text-align:center;}
+  .landing-box h1{font-size:22px;margin:0 0 8px;}
+  .landing-box p{font-size:14px;color:var(--text-soft);line-height:1.6;margin:0 0 32px;}
+  .choice-grid{display:flex;flex-direction:column;gap:12px;}
+  .choice-btn{display:block;width:100%;text-align:left;background:var(--surface);
+    border:1px solid var(--border);border-radius:10px;padding:18px 20px;cursor:pointer;
+    font-family:inherit;color:var(--text);transition:border-color .15s;}
+  .choice-btn:hover{border-color:var(--accent);}
+  .choice-btn .choice-title{font-size:15px;font-weight:700;display:flex;align-items:center;gap:8px;margin-bottom:4px;}
+  .choice-btn .choice-desc{font-size:12.5px;color:var(--text-soft);line-height:1.5;}
+
+  .dev-form{display:none;background:var(--surface);border:1px solid var(--border);
+    border-radius:10px;padding:18px 20px;text-align:left;margin-top:4px;}
+  .dev-form.show{display:block;}
+  .dev-form label{font-size:12px;color:var(--text-soft);display:block;margin-bottom:6px;}
+  .dev-form input{width:100%;border:1px solid var(--border);border-radius:6px;
+    padding:9px 10px;font-size:13.5px;background:var(--bg);color:var(--text);}
+  .dev-form-actions{display:flex;gap:8px;margin-top:10px;}
+  .dev-form button{border:none;border-radius:6px;padding:9px 16px;font-size:13px;
+    cursor:pointer;font-weight:600;font-family:inherit;}
+  .dev-form .submit-btn{background:var(--accent);color:var(--on-accent);}
+  .dev-form .cancel-btn{background:none;border:1px solid var(--border);color:var(--text);}
+  .dev-error{font-size:12.5px;color:var(--danger);margin-top:10px;display:none;}
+  .dev-error.show{display:block;}
+</style>
+</head>
+<body>
+  <div class="landing-box">
+    <h1>Operations Portal</h1>
+    <p>Πριν συνεχίσεις, διάλεξε πώς θα μπεις.</p>
+
+    <div class="choice-grid" id="choiceGrid">
+      <button type="button" class="choice-btn" id="devBtn">
+        <div class="choice-title">👨‍💻 Developer</div>
+        <div class="choice-desc">Πρόσβαση στο πραγματικό workspace περιεχομένου (χρειάζεται κωδικό).</div>
+      </button>
+      <button type="button" class="choice-btn" id="guestBtn">
+        <div class="choice-title">🙋 Επισκέπτης / Guest</div>
+        <div class="choice-desc">Δοκίμασε ελεύθερα το εργαλείο σε έναν δικό σου, ξεχωριστό χώρο. Ό,τι ανεβάσεις δεν το βλέπει κανείς άλλος, και σβήνεται μόνο του μετά από 7 μέρες.</div>
+      </button>
+    </div>
+
+    <div class="dev-form" id="devForm">
+      <label for="devPassword">Κωδικός Developer</label>
+      <input type="password" id="devPassword" placeholder="••••••••" autocomplete="current-password">
+      <div class="dev-form-actions">
+        <button type="button" class="submit-btn" id="devSubmitBtn">Είσοδος</button>
+        <button type="button" class="cancel-btn" id="devCancelBtn">Άκυρο</button>
+      </div>
+      <div class="dev-error" id="devError">Λάθος κωδικός.</div>
+    </div>
+  </div>
+
+<script>
+  const el = (id) => document.getElementById(id);
+
+  el("guestBtn").addEventListener("click", () => {
+    // Νέο, τυχαίο, απομονωμένο workspace -- κανείς άλλος δεν το βλέπει.
+    const id = crypto.randomUUID();
+    localStorage.setItem("workspaceId", id);
+    window.location.href = "/";
+  });
+
+  el("devBtn").addEventListener("click", () => {
+    el("choiceGrid").style.display = "none";
+    el("devForm").classList.add("show");
+    el("devPassword").focus();
+  });
+
+  el("devCancelBtn").addEventListener("click", () => {
+    el("devForm").classList.remove("show");
+    el("choiceGrid").style.display = "flex";
+    el("devError").classList.remove("show");
+    el("devPassword").value = "";
+  });
+
+  async function submitDevLogin() {
+    const password = el("devPassword").value;
+    const btn = el("devSubmitBtn");
+    const errorEl = el("devError");
+    errorEl.classList.remove("show");
+    btn.disabled = true;
+    btn.textContent = "Έλεγχος…";
+    try {
+      const res = await fetch("/developer-login", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ password }),
+      });
+      const data = await res.json();
+      if (!res.ok || !data.ok) {
+        errorEl.classList.add("show");
+        btn.disabled = false;
+        btn.textContent = "Είσοδος";
+        return;
+      }
+      localStorage.setItem("workspaceId", data.workspaceId);
+      window.location.href = "/";
+    } catch (err) {
+      errorEl.textContent = "Σφάλμα σύνδεσης: " + err.message;
+      errorEl.classList.add("show");
+      btn.disabled = false;
+      btn.textContent = "Είσοδος";
+    }
+  }
+
+  el("devSubmitBtn").addEventListener("click", submitDevLogin);
+  el("devPassword").addEventListener("keydown", (e) => {
+    if (e.key === "Enter") submitDevLogin();
+  });
+</script>
+</body>
+</html>

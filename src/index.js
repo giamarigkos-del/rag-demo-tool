@@ -6,6 +6,27 @@ const MAX_UPLOAD_WORDS = 8000;
 const MAX_UPLOAD_BYTES = 2 * 1024 * 1024;
 const FALLBACK_TTL_SECONDS = 60 * 60 * 24 * 7; // 7 ημέρες
 
+// Το πραγματικό workspace του διαχειριστή -- ΠΟΤΕ καμία λήξη σε τίποτα εδώ
+// (draft, deleted, ή δημοσιευμένο). Κάθε άλλο workspace (τυχαίοι επισκέπτες
+// με το δικό τους αυτόματο, τοπικά-αποθηκευμένο ID) παίρνει ενιαία λήξη
+// 7 ημερών σε ΟΤΙΔΗΠΟΤΕ ανεβάσουν/αλλάξουν -- ανανεώνεται αυτόματα σε κάθε
+// νέα εγγραφή, οπότε κάτι που συντηρείται ενεργά ουσιαστικά δεν λήγει ποτέ.
+const PROTECTED_WORKSPACE_ID = "efood-ops-demo";
+const VISITOR_DOC_TTL_SECONDS = 60 * 60 * 24 * 7; // 7 ημέρες
+
+// Επιστρέφει τα options που πρέπει να περάσουν στο env.DOCUMENT_REGISTRY.put(),
+// και το ισοδύναμο expiresAt (για να το δείχνουμε στο frontend), ανάλογα με
+// το αν το workspace είναι το προστατευμένο ή όχι.
+function docTtlFor(workspaceId) {
+  if (workspaceId === PROTECTED_WORKSPACE_ID) {
+    return { putOptions: {}, expiresAt: null };
+  }
+  return {
+    putOptions: { expirationTtl: VISITOR_DOC_TTL_SECONDS },
+    expiresAt: new Date(Date.now() + VISITOR_DOC_TTL_SECONDS * 1000).toISOString(),
+  };
+}
+
 function chunkText(text) {
   const words = text.trim().split(/\s+/);
   const chunks = [];
@@ -174,6 +195,7 @@ async function handleUpload(request, env) {
   // Το chunking παραπάνω παραμένει ξεχωριστό και χρησιμεύει ΜΟΝΟ για
   // embeddings/αναζήτηση -- ποτέ πια δεν το χρησιμοποιούμε για να δείξουμε
   // κείμενο σε άνθρωπο.
+  const { putOptions, expiresAt } = docTtlFor(workspaceId);
   await env.DOCUMENT_REGISTRY.put(
     kvKey,
     JSON.stringify({
@@ -184,7 +206,9 @@ async function handleUpload(request, env) {
       sourceUrl: sourceUrl || null,
       fullText: text,
       status,
-    })
+      expiresAt,
+    }),
+    putOptions
   );
 
   return new Response(
@@ -241,6 +265,7 @@ async function handleGetDocument(request, env, documentId) {
       updatedAt: existing.updatedAt,
       sourceUrl: existing.sourceUrl || null,
       status: existing.status || "published",
+      expiresAt: existing.expiresAt || null,
       text: fullText,
     }),
     { headers: JSON_HEADERS }
@@ -271,6 +296,7 @@ async function handleListDocuments(request, env) {
         updatedAt: meta.updatedAt,
         sourceUrl: meta.sourceUrl || null,
         status: meta.status || "published",
+        expiresAt: meta.expiresAt || null,
         // ΝΕΟ: μικρό απόσπασμα του περιεχομένου, ώστε ο editor να αναγνωρίζει
         // το έγγραφο "με το μάτι" στη λίστα, όχι μόνο από τον τίτλο/documentId.
         // Reuse του ήδη υπάρχοντος makePreview() -- τίποτα καινούριο.
@@ -573,7 +599,9 @@ async function handlePublishDocument(request, env, documentId) {
   doc.chunkCount = chunks.length;
   doc.publishedAt = new Date().toISOString();
 
-  await env.DOCUMENT_REGISTRY.put(kvKey, JSON.stringify(doc));
+  const { putOptions, expiresAt } = docTtlFor(workspaceId);
+  doc.expiresAt = expiresAt;
+  await env.DOCUMENT_REGISTRY.put(kvKey, JSON.stringify(doc), putOptions);
 
   return new Response(
     JSON.stringify({ documentId, status: "published", chunksCreated: chunks.length }),
@@ -612,7 +640,9 @@ async function handleDeleteDocument(request, env, documentId) {
   doc.status = "deleted";
   doc.chunkCount = 0;
 
-  await env.DOCUMENT_REGISTRY.put(kvKey, JSON.stringify(doc));
+  const { putOptions, expiresAt } = docTtlFor(workspaceId);
+  doc.expiresAt = expiresAt;
+  await env.DOCUMENT_REGISTRY.put(kvKey, JSON.stringify(doc), putOptions);
 
   return new Response(
     JSON.stringify({ documentId, status: "deleted" }),
@@ -644,12 +674,34 @@ async function handleRestoreDocument(request, env, documentId) {
   const doc = JSON.parse(raw);
   doc.status = "draft";
 
-  await env.DOCUMENT_REGISTRY.put(kvKey, JSON.stringify(doc));
+  const { putOptions, expiresAt } = docTtlFor(workspaceId);
+  doc.expiresAt = expiresAt;
+  await env.DOCUMENT_REGISTRY.put(kvKey, JSON.stringify(doc), putOptions);
 
   return new Response(
     JSON.stringify({ documentId, status: "draft" }),
     { headers: JSON_HEADERS }
   );
+}
+
+// Απλός έλεγχος κωδικού για τη λειτουργία "Developer" στη landing page.
+// Ο πραγματικός κωδικός ζει ΜΟΝΟ σαν Worker secret (env.DEVELOPER_PASSWORD),
+// ποτέ μέσα στον κώδικα. Καμία session/cookie/token -- το frontend απλά
+// θυμάται την επιτυχία τοπικά (localStorage) μετά από αυτόν τον έλεγχο.
+async function handleDeveloperLogin(request, env) {
+  let body;
+  try {
+    body = await request.json();
+  } catch (err) {
+    return new Response(JSON.stringify({ ok: false, error: "Άκυρο αίτημα" }), { status: 400, headers: JSON_HEADERS });
+  }
+
+  const { password } = body;
+  if (!env.DEVELOPER_PASSWORD || password !== env.DEVELOPER_PASSWORD) {
+    return new Response(JSON.stringify({ ok: false, error: "Λάθος κωδικός" }), { status: 401, headers: JSON_HEADERS });
+  }
+
+  return new Response(JSON.stringify({ ok: true, workspaceId: PROTECTED_WORKSPACE_ID }), { headers: JSON_HEADERS });
 }
 
 export default {
@@ -661,6 +713,10 @@ export default {
         JSON.stringify({ status: "ok", message: "Operations Portal RAG is alive" }),
         { headers: JSON_HEADERS }
       );
+    }
+
+    if (url.pathname === "/developer-login" && request.method === "POST") {
+      return handleDeveloperLogin(request, env);
     }
 
     if (url.pathname === "/upload" && request.method === "POST") {

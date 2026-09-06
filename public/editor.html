@@ -55,6 +55,7 @@
     border-radius:10px;margin-left:6px;vertical-align:middle;white-space:nowrap;}
   .status-badge.draft{background:var(--warn-bg);color:var(--warn-border);border:1px solid var(--warn-border);}
   .status-badge.deleted{background:rgba(229,100,107,.12);color:var(--danger);border:1px solid var(--danger);}
+  .status-badge.expiry{background:var(--surface-2);color:var(--text-soft);border:1px solid var(--border);font-weight:600;}
 
   .deleted-toggle{border:none;background:none;color:var(--accent);font-size:11.5px;cursor:pointer;
     padding:8px 0 0;text-align:left;width:100%;}
@@ -178,6 +179,7 @@
 
   <div class="top-bar">
     <strong>Διαχείριση Περιεχομένου</strong>
+    <a class="back-link" id="switchModeLink" href="#">Αλλαγή λειτουργίας</a>
     <a class="back-link" href="/">←Portal</a>
   </div>
 
@@ -278,7 +280,7 @@
       }
       grid.innerHTML = filtered.map(d => `
         <button type="button" class="doc-browser-card" data-id="${escapeHtml(d.documentId)}">
-          <h3>${escapeHtml(d.title || d.documentId)}${d.status === "draft" ? '<span class="status-badge draft">Πρόχειρο</span>' : ""}</h3>
+          <h3>${escapeHtml(d.title || d.documentId)}${d.status === "draft" ? '<span class="status-badge draft">Πρόχειρο</span>' : ""}${expiryLabel(d.expiresAt) ? `<span class="status-badge expiry">${expiryLabel(d.expiresAt)}</span>` : ""}</h3>
           <span class="doc-browser-card-date">Ενημερώθηκε ${timeAgo(d.updatedAt)}</span>
           <div class="doc-browser-card-preview">${escapeHtml(d.preview || "")}</div>
         </button>
@@ -314,7 +316,7 @@
             <strong>${escapeHtml(d.title || d.documentId)}</strong>
             <span class="doc-time">${timeAgo(d.updatedAt)}</span>
           </div>
-          <div class="doc-row-preview">${escapeHtml(d.preview || "")}${d.status === "draft" ? '<span class="status-badge draft">Πρόχειρο</span>' : ""}</div>
+          <div class="doc-row-preview">${escapeHtml(d.preview || "")}${d.status === "draft" ? '<span class="status-badge draft">Πρόχειρο</span>' : ""}${expiryLabel(d.expiresAt) ? `<span class="status-badge expiry">${expiryLabel(d.expiresAt)}</span>` : ""}</div>
         </div>
       `).join("");
 
@@ -484,6 +486,7 @@
     const metaParts = [];
     if (data.updatedAt) metaParts.push(`Ενημερώθηκε ${timeAgo(data.updatedAt)}`);
     if (data.chunkCount != null) metaParts.push(`${data.chunkCount} τμήματα`);
+    if (expiryLabel(data.expiresAt)) metaParts.push(expiryLabel(data.expiresAt));
 
     const isDraft = data.status === "draft";
 
@@ -845,6 +848,12 @@
 
   loadDocuments().then(renderDocBrowser);
   loadFallbackQuestions();
+
+  el("switchModeLink").addEventListener("click", (e) => {
+    e.preventDefault();
+    localStorage.removeItem("workspaceId");
+    window.location.href = "/landing.html";
+  });
 </script>
 </body>
 </html>

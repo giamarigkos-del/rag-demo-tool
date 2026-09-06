@@ -72,7 +72,7 @@
     <button id="sourceBannerBtn">Δες το άρθρο →</button>
   </div>
 
-  <div class="host-nav"><strong>Operations Portal</strong><a class="editor-link" href="/editor.html">Διαχείριση περιεχομένου</a></div>
+  <div class="host-nav"><strong>Operations Portal</strong><a class="editor-link" id="switchModeLink" href="#">Αλλαγή λειτουργίας</a><a class="editor-link" href="/editor.html">Διαχείριση περιεχομένου</a></div>
   <div class="host-body">
     <h1>Πρόσφατα έγγραφα</h1>
     <p class="host-intro">Διαδικασίες και πολιτικές της εταιρείας. Κάνε κλικ σε ένα έγγραφο για να το διαβάσεις, ή ρώτησε τον βοηθό κάτω-δεξιά.</p>
@@ -129,6 +129,12 @@
   }
 
   loadHostDocuments();
+
+  el("switchModeLink").addEventListener("click", (e) => {
+    e.preventDefault();
+    localStorage.removeItem("workspaceId");
+    window.location.href = "/landing.html";
+  });
 
   el("launcherBtn").addEventListener("click", () => {
     el("chatWindow").classList.toggle("open");
