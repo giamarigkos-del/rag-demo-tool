@@ -490,7 +490,7 @@ async function handleGetFallbackQuestions(request, env) {
       const raw = await env.DOCUMENT_REGISTRY.get(key.name);
       if (!raw) return null;
       const parsed = JSON.parse(raw);
-      return { question: parsed.question, timestamp: parsed.timestamp };
+      return { id: key.name.slice(prefix.length), question: parsed.question, timestamp: parsed.timestamp };
     })
   );
 
@@ -504,6 +504,24 @@ async function handleGetFallbackQuestions(request, env) {
     JSON.stringify({ questions: cleaned }),
     { headers: JSON_HEADERS }
   );
+}
+
+// Ο editor διαχειρίστηκε ήδη μια ερώτηση χωρίς απάντηση (π.χ. πρόσθεσε
+// περιεχόμενο γι' αυτήν) -- τη διαγράφει από τη λίστα χειροκίνητα, χωρίς
+// να περιμένει το 7ήμερο TTL να τη σβήσει μόνο του.
+async function handleDeleteFallbackQuestion(request, env, id) {
+  const workspaceId = request.headers.get("X-Workspace-Id");
+  if (!workspaceId) {
+    return new Response(
+      JSON.stringify({ error: "Missing X-Workspace-Id header" }),
+      { status: 400, headers: JSON_HEADERS }
+    );
+  }
+
+  const kvKey = `session:${workspaceId}:fallback:${id}`;
+  await env.DOCUMENT_REGISTRY.delete(kvKey);
+
+  return new Response(JSON.stringify({ id, deleted: true }), { headers: JSON_HEADERS });
 }
 
 // Section D: "Δημοσίευση" -- παίρνει το ήδη αποθηκευμένο fullText ενός
@@ -696,6 +714,17 @@ export default {
 
     if (url.pathname === "/fallback-questions" && request.method === "GET") {
       return handleGetFallbackQuestions(request, env);
+    }
+
+    if (url.pathname.startsWith("/fallback-questions/") && request.method === "DELETE") {
+      const rawId = url.pathname.split("/fallback-questions/")[1] || "";
+      let id = rawId;
+      try {
+        id = decodeURIComponent(rawId);
+      } catch (err) {
+        // κρατάμε το raw αν το decode αποτύχει
+      }
+      return handleDeleteFallbackQuestion(request, env, id);
     }
 
     return new Response("Not found", { status: 404 });
