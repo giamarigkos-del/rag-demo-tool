@@ -44,10 +44,6 @@
     return `${d.getDate()} ${GREEK_MONTHS[d.getMonth()]} ${d.getFullYear()}`;
   }
 
-  function renderBody(text) {
-    return renderMarkdown(text || "");
-  }
-
   async function loadArticle() {
     const container = el("articleBody");
 
@@ -74,7 +70,7 @@
       container.innerHTML = `
         <h1>${escapeHtml(data.title || data.documentId)}</h1>
         <span class="tag">Ενημερώθηκε: ${formatDate(data.updatedAt)}</span>
-        <div class="article-content md-content">${renderBody(data.text || "")}</div>
+        <div class="article-content md-content">${renderMarkdown(data.text || "")}</div>
       `;
     } catch (err) {
       container.innerHTML = '<div class="state-note">Σφάλμα φόρτωσης: ' + escapeHtml(err.message) + '</div>';

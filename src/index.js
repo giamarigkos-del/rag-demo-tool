@@ -359,15 +359,7 @@ async function handleSearchDocuments(request, env) {
     }
   }
 
-  const docMetaCache = new Map();
-  async function getDocMeta(documentId) {
-    if (docMetaCache.has(documentId)) return docMetaCache.get(documentId);
-    const docKvKey = `session:${workspaceId}:doc:${documentId}`;
-    const docRaw = await env.DOCUMENT_REGISTRY.get(docKvKey);
-    const meta = docRaw ? JSON.parse(docRaw) : {};
-    docMetaCache.set(documentId, meta);
-    return meta;
-  }
+  const getDocMeta = createDocMetaCache(env, workspaceId);
 
   const grouped = [...byDocument.entries()].sort((a, b) => b[1].score - a[1].score);
 
@@ -384,6 +376,21 @@ async function handleSearchDocuments(request, env) {
   );
 
   return new Response(JSON.stringify({ documents }), { headers: JSON_HEADERS });
+}
+
+// Μικρό cache ώστε να μη διαβάζουμε το ίδιο έγγραφο δύο φορές από το KV
+// μέσα στο ίδιο request. Χρησιμοποιείται τόσο στο handleQuery όσο και στο
+// handleSearchDocuments -- μία κοινή υλοποίηση αντί για δύο πανομοιότυπες.
+function createDocMetaCache(env, workspaceId) {
+  const cache = new Map();
+  return async function getDocMeta(documentId) {
+    if (cache.has(documentId)) return cache.get(documentId);
+    const docKvKey = `session:${workspaceId}:doc:${documentId}`;
+    const docRaw = await env.DOCUMENT_REGISTRY.get(docKvKey);
+    const meta = docRaw ? JSON.parse(docRaw) : {};
+    cache.set(documentId, meta);
+    return meta;
+  };
 }
 
 async function handleQuery(request, env) {
@@ -449,22 +456,12 @@ async function handleQuery(request, env) {
   // Βήμα 6: ταξινόμηση κατά score (το Vectorize συνήθως το κάνει ήδη, αλλά το εξασφαλίζουμε)
   const sortedMatches = [...matches.matches].sort((a, b) => b.score - a.score);
 
-  // Μικρό cache ώστε να μη διαβάζουμε το ίδιο έγγραφο δύο φορές από το KV
-  const docMetaCache = new Map();
-  async function getDocMeta(documentId) {
-    if (docMetaCache.has(documentId)) return docMetaCache.get(documentId);
-    const docKvKey = `session:${workspaceId}:doc:${documentId}`;
-    const docRaw = await env.DOCUMENT_REGISTRY.get(docKvKey);
-    const meta = docRaw ? JSON.parse(docRaw) : {};
-    docMetaCache.set(documentId, meta);
-    return meta;
-  }
-
   // Η πιο σχετική πηγή -- αυτή που "κουβαλάει" κυρίως την απάντηση
   const topMatch = sortedMatches[0];
 
   let primarySource = null;
   if (!isFallback) {
+    const getDocMeta = createDocMetaCache(env, workspaceId);
     const docMeta = await getDocMeta(topMatch.metadata.documentId);
 
     primarySource = {
@@ -477,21 +474,11 @@ async function handleQuery(request, env) {
     };
   }
 
-  // Οι υπόλοιπες -- σαν "Σχετικές ενότητες" προτάσεις για τον χρήστη
-  const relatedSections = isFallback
-    ? []
-    : await Promise.all(
-        sortedMatches.slice(1).map(async (m) => {
-          const docMeta = await getDocMeta(m.metadata.documentId);
-          return {
-            documentId: m.metadata.documentId,
-            title: docMeta.title || null,
-            chunkIndex: m.metadata.chunkIndex,
-            score: m.score,
-            preview: makePreview(m.metadata.text),
-          };
-        })
-      );
+  // Σημείωση: παλιότερα υπολογίζαμε εδώ και "σχετικές ενότητες" (τα
+  // υπόλοιπα matches εκτός του πρώτου), αλλά κανένα frontend δεν τις
+  // δείχνει πια -- αφαιρέθηκε ο υπολογισμός για να μη γίνονται άσκοπα
+  // KV reads σε κάθε ερώτηση. Το πεδίο μένει άδειο για συμβατότητα.
+  const relatedSections = [];
 
   return new Response(
     JSON.stringify({ answer, isFallback, primarySource, relatedSections }),
