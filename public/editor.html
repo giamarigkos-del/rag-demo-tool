@@ -100,6 +100,21 @@
   .main{flex:1;overflow-y:auto;padding:32px 40px;min-width:0;}
   .main-placeholder{color:var(--text-soft);font-size:14px;margin-top:60px;text-align:center;}
 
+  .doc-browser-head{display:flex;align-items:center;justify-content:space-between;
+    margin-bottom:18px;gap:16px;flex-wrap:wrap;}
+  .doc-browser-head h2{font-size:20px;margin:0;}
+  .doc-browser-search{flex:1;max-width:320px;border:1px solid var(--border);border-radius:6px;
+    padding:8px 10px;font-size:13px;font-family:inherit;}
+  .doc-browser-grid{display:grid;grid-template-columns:repeat(auto-fill, minmax(240px, 1fr));gap:14px;}
+  .doc-browser-card{display:block;width:100%;text-align:left;background:var(--surface);
+    border:1px solid var(--border);border-radius:8px;padding:16px;cursor:pointer;font-family:inherit;
+    transition:border-color .15s;}
+  .doc-browser-card:hover{border-color:var(--accent);}
+  .doc-browser-card h3{font-size:14.5px;margin:0 0 6px;color:var(--text);display:flex;align-items:center;gap:6px;}
+  .doc-browser-card-date{font-size:11.5px;color:var(--text-soft);display:block;margin-bottom:8px;}
+  .doc-browser-card-preview{font-size:12.5px;line-height:1.6;color:var(--text-soft);
+    display:-webkit-box;-webkit-line-clamp:3;-webkit-box-orient:vertical;overflow:hidden;}
+
   .preview-head h2{font-size:22px;margin:0 0 6px;}
   .preview-meta{font-size:12.5px;color:var(--text-soft);margin-bottom:20px;}
   .preview-meta a{color:var(--accent);}
@@ -173,7 +188,10 @@
         <input type="text" class="filter-input" id="docFilterInput" placeholder="Φίλτρο με τίτλο…">
       </div>
       <div class="sidebar-section grow">
-        <div class="label">Έγγραφα</div>
+        <div class="label-row">
+          <div class="label">Έγγραφα</div>
+          <button type="button" class="refresh-btn" id="allDocsBtn">Όλα τα έγγραφα</button>
+        </div>
         <div id="docList">Φόρτωση…</div>
         <button type="button" class="deleted-toggle" id="deletedToggleBtn" style="display:none;"></button>
         <div id="deletedList" style="display:none;"></div>
@@ -198,7 +216,7 @@
     </div>
 
     <div class="main" id="mainPanel">
-      <div class="main-placeholder">Επίλεξε ένα έγγραφο από τα αριστερά, ή δημιούργησε νέο.</div>
+      <div class="main-placeholder">Φόρτωση…</div>
     </div>
   </div>
 
@@ -226,6 +244,52 @@
     } catch (err) {
       list.textContent = "Σφάλμα φόρτωσης: " + err.message;
     }
+  }
+
+  // --- Browser εγγράφων στο κεντρικό panel -- αντικαθιστά το άδειο
+  // "Επίλεξε ένα έγγραφο..." όταν δεν υπάρχει επιλεγμένο έγγραφο. Ίδιο
+  // οπτικό στυλ με το "Πρόσφατα έγγραφα" grid του δημόσιου Portal, αλλά με
+  // δική του αναζήτηση και ΟΛΑ τα έγγραφα (πρόχειρα + δημοσιευμένα, όχι
+  // διαγραμμένα) -- έτσι λύνεται εύκολα η επιλογή όταν υπάρχουν πολλά.
+  function renderDocBrowser() {
+    const main = el("mainPanel");
+    const docs = allDocuments.filter(d => d.status !== "deleted");
+
+    main.innerHTML = `
+      <div class="doc-browser-head">
+        <h2>Όλα τα έγγραφα</h2>
+        <input type="text" class="doc-browser-search" id="docBrowserSearch" placeholder="Φίλτρο με τίτλο…">
+      </div>
+      <div class="doc-browser-grid" id="docBrowserGrid"></div>
+    `;
+
+    function renderGrid() {
+      const filterVal = el("docBrowserSearch").value.trim().toLowerCase();
+      const filtered = !filterVal
+        ? docs
+        : docs.filter(d =>
+            (d.title || "").toLowerCase().includes(filterVal) ||
+            d.documentId.toLowerCase().includes(filterVal)
+          );
+      const grid = el("docBrowserGrid");
+      if (!filtered.length) {
+        grid.innerHTML = `<div class="empty-note">${docs.length ? "Κανένα αποτέλεσμα." : "Δεν υπάρχουν έγγραφα ακόμα."}</div>`;
+        return;
+      }
+      grid.innerHTML = filtered.map(d => `
+        <button type="button" class="doc-browser-card" data-id="${escapeHtml(d.documentId)}">
+          <h3>${escapeHtml(d.title || d.documentId)}${d.status === "draft" ? '<span class="status-badge draft">Πρόχειρο</span>' : ""}</h3>
+          <span class="doc-browser-card-date">Ενημερώθηκε ${timeAgo(d.updatedAt)}</span>
+          <div class="doc-browser-card-preview">${escapeHtml(d.preview || "")}</div>
+        </button>
+      `).join("");
+      grid.querySelectorAll(".doc-browser-card").forEach(card => {
+        card.addEventListener("click", () => openPreview(card.dataset.id));
+      });
+    }
+
+    el("docBrowserSearch").addEventListener("input", renderGrid);
+    renderGrid();
   }
 
   function renderDocList() {
@@ -490,7 +554,7 @@
         if (!res.ok) throw new Error(result.error || "Αποτυχία διαγραφής");
         currentSelectedId = null;
         await loadDocuments();
-        el("mainPanel").innerHTML = '<div class="main-placeholder">Επίλεξε ένα έγγραφο από τα αριστερά, ή δημιούργησε νέο.</div>';
+        renderDocBrowser();
       } catch (err) {
         alert("Σφάλμα διαγραφής: " + err.message);
         btn.disabled = false;
@@ -520,6 +584,13 @@
   }
 
   el("newDocBtn").addEventListener("click", enterNewDocumentMode);
+
+  el("allDocsBtn").addEventListener("click", () => {
+    if (tuiEditorInstance) { tuiEditorInstance.destroy(); tuiEditorInstance = null; }
+    currentSelectedId = null;
+    renderDocList();
+    renderDocBrowser();
+  });
 
   function renderEditForm({ title, documentId, text, sourceUrl, isExisting }) {
     const main = el("mainPanel");
@@ -593,7 +664,9 @@
       if (tuiEditorInstance) { tuiEditorInstance.destroy(); tuiEditorInstance = null; }
       if (isExisting) openPreview(documentId);
       else {
-        el("mainPanel").innerHTML = '<div class="main-placeholder">Επίλεξε ένα έγγραφο από τα αριστερά, ή δημιούργησε νέο.</div>';
+        currentSelectedId = null;
+        renderDocList();
+        renderDocBrowser();
       }
     });
 
@@ -770,7 +843,7 @@
     out.querySelector("pre").textContent = JSON.stringify(data, null, 2);
   }
 
-  loadDocuments();
+  loadDocuments().then(renderDocBrowser);
   loadFallbackQuestions();
 </script>
 </body>
