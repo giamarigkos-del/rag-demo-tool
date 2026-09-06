@@ -4,15 +4,30 @@
 // (localStorage) ώστε να μη ρωτάει ξανά στο ίδιο browser. Αν δεν έχει γίνει
 // ακόμα καμία επιλογή, στέλνουμε στη landing page πριν φορτώσει οτιδήποτε
 // άλλο -- δεν έχει νόημα να καλέσουμε το backend χωρίς workspace.
+//
+// ΣΗΜΑΝΤΙΚΟ: η landing.html φορτώνει ΚΙ ΑΥΤΗ το shared.js (για τις i18n
+// συναρτήσεις), οπότε ΔΕΝ πρέπει ποτέ να ανακατευθύνει τον εαυτό της σε
+// τον εαυτό της. Παλιότερα αυτό ελεγχόταν συγκρίνοντας το URL
+// (window.location.pathname.endsWith(...)), αλλά αυτό αποδείχτηκε εύθραυστο
+// -- π.χ. ένα trailing slash στο URL (/landing.html/) το έσπαγε και
+// δημιουργούσε άπειρο βρόχο ανανέωσης. Αντ' αυτού, η landing.html δηλώνει
+// ρητά μια global σημαία (window.__IS_LANDING_PAGE__ = true) ΠΡΙΝ φορτώσει
+// το shared.js -- καμία εξάρτηση από το πώς μοιάζει το URL.
+//
+// Επιπλέον, ασφάλεια δεύτερου επιπέδου: αν παρ' όλα αυτά κάτι προσπαθήσει να
+// ανακατευθύνει ξανά μέσα στο ίδιο tab χωρίς ποτέ να αποκτήσει workspaceId,
+// σταματάμε μετά την πρώτη προσπάθεια αντί να μπούμε σε άπειρο βρόχο.
 function resolveWorkspaceId() {
   const stored = localStorage.getItem("workspaceId");
   if (stored) return stored;
-  // Σημείωση: αν είμαστε ήδη στη landing page, δεν ανακατευθύνουμε -- θα
-  // δημιουργούσε βρόχο. Το landing.html φορτώνει το shared.js μόνο για τις
-  // i18n συναρτήσεις (t, applyTranslations κ.λπ.), όχι για workspace calls.
-  if (!window.location.pathname.endsWith("/landing.html")) {
-    window.location.href = "/landing.html";
-  }
+
+  if (window.__IS_LANDING_PAGE__) return null;
+
+  const alreadyRedirected = sessionStorage.getItem("landingRedirectAttempted");
+  if (alreadyRedirected) return null;
+
+  sessionStorage.setItem("landingRedirectAttempted", "1");
+  window.location.href = "/landing.html";
   return null;
 }
 
