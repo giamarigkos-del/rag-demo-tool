@@ -18,6 +18,33 @@ function formatAnswer(text) {
   return safe;
 }
 
+// Inline μορφοποίηση μέσα σε μία γραμμή: **bold** και *πλάγια*.
+function inlineFormat(line) {
+  return line
+    .replace(/\*\*(.+?)\*\*/g, "<strong>$1</strong>")
+    .replace(/\*(.+?)\*/g, "<em>$1</em>");
+}
+
+// Πλήρης μετατροπή markdown -> HTML για το κείμενο ενός εγγράφου (Section C).
+// Υποστηρίζει: παραγράφους (κενή γραμμή = νέα παράγραφος), **bold**, *πλάγια*,
+// και λίστες με γραμμές που ξεκινούν με "- ". Ίδια λογική χρησιμοποιείται
+// στο live preview του editor, στο read-only preview, και στη δημόσια
+// σελίδα άρθρου -- μία πηγή αλήθειας για το πώς φαίνεται το κείμενο.
+function renderMarkdown(text) {
+  const escaped = escapeHtml(text);
+  const blocks = escaped.split(/\n\s*\n/).map(b => b.trim()).filter(Boolean);
+  if (!blocks.length) return "";
+  return blocks.map(block => {
+    const lines = block.split("\n");
+    const isList = lines.every(l => /^-\s+/.test(l.trim()));
+    if (isList) {
+      const items = lines.map(l => `<li>${inlineFormat(l.trim().replace(/^-\s+/, ""))}</li>`).join("");
+      return `<ul>${items}</ul>`;
+    }
+    return `<p>${lines.map(inlineFormat).join("<br>")}</p>`;
+  }).join("");
+}
+
 // Παράγει τεχνικό documentId από τον τίτλο -- ο editor δεν χρειάζεται ποτέ
 // να σκεφτεί ή να πληκτρολογήσει ID χειροκίνητα. Μετατρέπει Ελληνικά σε
 // Λατινικά (ίδιο στυλ με τα ήδη υπάρχοντα slugs: shop-journey,

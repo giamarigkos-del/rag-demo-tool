@@ -17,6 +17,8 @@
     padding:3px 9px;border-radius:20px;color:var(--text-soft);margin-bottom:32px;}
   .article-content{font-size:15px;line-height:1.75;color:var(--text);}
   .article-content p{margin:0 0 18px;}
+  .article-content ul{margin:0 0 18px;padding-left:22px;}
+  .article-content li{margin-bottom:6px;}
   .state-note{font-size:14px;color:var(--text-soft);padding:40px 0;}
 </style>
 </head>
@@ -44,10 +46,7 @@
   }
 
   function renderBody(text) {
-    const escaped = escapeHtml(text);
-    const paragraphs = escaped.split(/\n\s*\n/).map(p => p.trim()).filter(Boolean);
-    if (!paragraphs.length) return `<p>${escaped}</p>`;
-    return paragraphs.map(p => `<p>${p.replace(/\n/g, "<br>")}</p>`).join("");
+    return renderMarkdown(text || "");
   }
 
   async function loadArticle() {
