@@ -24,10 +24,10 @@
   .layout{flex:1;display:flex;min-height:0;}
 
   .sidebar{width:340px;flex-shrink:0;border-left:1px solid var(--border);background:var(--surface);
-    display:flex;flex-direction:column;min-height:0;order:2;}
+    display:flex;flex-direction:column;min-height:0;overflow-y:auto;order:2;}
   .main{order:1;}
   .sidebar-section{padding:14px 16px;}
-  .sidebar-section.grow{flex:1;overflow-y:auto;min-height:0;border-top:1px solid var(--border);border-bottom:1px solid var(--border);}
+  .sidebar-section.grow{max-height:300px;overflow-y:auto;border-top:1px solid var(--border);border-bottom:1px solid var(--border);}
   .label{font-size:11px;color:var(--text-soft);margin-bottom:8px;text-transform:uppercase;letter-spacing:.02em;}
   .label-row{display:flex;align-items:center;justify-content:space-between;margin-bottom:8px;}
   .label-row .label{margin-bottom:0;}
@@ -71,6 +71,7 @@
   .search-result-row:hover{background:var(--surface-2);}
   .search-result-row strong{display:block;color:var(--text);font-size:12.5px;}
   .search-result-row span{color:var(--text-soft);}
+  .search-results{margin-top:8px;max-height:220px;overflow-y:auto;}
 
   .fallback-row{font-size:12.5px;padding:7px 6px;border-bottom:1px solid var(--border);color:var(--text);
     line-height:1.5;display:flex;align-items:flex-start;justify-content:space-between;gap:8px;}
@@ -83,6 +84,7 @@
     padding:0;margin-top:1px;}
   .fallback-dismiss:hover{background:var(--danger);border-color:var(--danger);color:var(--on-accent);}
   .fallback-dismiss:disabled{opacity:.5;cursor:default;}
+  .fallback-list{max-height:220px;overflow-y:auto;}
 
   .test-q{padding:14px 16px;flex-shrink:0;}
   .test-q input{width:100%;border:1px solid var(--border);border-radius:6px;padding:7px 9px;font-size:12px;margin-top:4px;}
@@ -179,7 +181,7 @@
       <div class="sidebar-section">
         <div class="label">Βρες με περιγραφή</div>
         <input type="text" class="search-input" id="docSearchInput" placeholder="π.χ. τα ωράρια του Billing…">
-        <div id="docSearchResults" style="margin-top:8px;"></div>
+        <div id="docSearchResults" class="search-results"></div>
       </div>
       <div class="test-q">
         <div class="label">Δοκιμαστικό ερώτημα</div>
@@ -191,7 +193,7 @@
           <div class="label">Ερωτήσεις χωρίς απάντηση</div>
           <button type="button" class="refresh-btn" id="refreshFallbackBtn">↻ Ανανέωση</button>
         </div>
-        <div id="fallbackList">Φόρτωση…</div>
+        <div id="fallbackList" class="fallback-list">Φόρτωση…</div>
       </div>
     </div>
 
