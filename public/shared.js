@@ -18,31 +18,17 @@ function formatAnswer(text) {
   return safe;
 }
 
-// Inline μορφοποίηση μέσα σε μία γραμμή: **bold** και *πλάγια*.
-function inlineFormat(line) {
-  return line
-    .replace(/\*\*(.+?)\*\*/g, "<strong>$1</strong>")
-    .replace(/\*(.+?)\*/g, "<em>$1</em>");
-}
-
-// Πλήρης μετατροπή markdown -> HTML για το κείμενο ενός εγγράφου (Section C).
-// Υποστηρίζει: παραγράφους (κενή γραμμή = νέα παράγραφος), **bold**, *πλάγια*,
-// και λίστες με γραμμές που ξεκινούν με "- ". Ίδια λογική χρησιμοποιείται
-// στο live preview του editor, στο read-only preview, και στη δημόσια
-// σελίδα άρθρου -- μία πηγή αλήθειας για το πώς φαίνεται το κείμενο.
+// Πλήρης μετατροπή markdown -> HTML για το κείμενο ενός εγγράφου. Χρησιμοποιεί
+// το marked.js (πλήρες markdown: επικεφαλίδες, links, πίνακες, code, quotes,
+// λίστες, **bold**, *πλάγια* κ.λπ.) και το DOMPurify για καθαρισμό του HTML
+// πριν μπει στη σελίδα -- το marked ΔΕΝ καθαρίζει μόνο του το output του.
+// Ίδια συνάρτηση χρησιμοποιείται στο live preview του editor, στο read-only
+// preview, και στη δημόσια σελίδα άρθρου -- μία πηγή αλήθειας για το πώς
+// φαίνεται το κείμενο.
 function renderMarkdown(text) {
-  const escaped = escapeHtml(text);
-  const blocks = escaped.split(/\n\s*\n/).map(b => b.trim()).filter(Boolean);
-  if (!blocks.length) return "";
-  return blocks.map(block => {
-    const lines = block.split("\n");
-    const isList = lines.every(l => /^-\s+/.test(l.trim()));
-    if (isList) {
-      const items = lines.map(l => `<li>${inlineFormat(l.trim().replace(/^-\s+/, ""))}</li>`).join("");
-      return `<ul>${items}</ul>`;
-    }
-    return `<p>${lines.map(inlineFormat).join("<br>")}</p>`;
-  }).join("");
+  if (!text) return "";
+  const html = marked.parse(text);
+  return typeof DOMPurify !== "undefined" ? DOMPurify.sanitize(html) : html;
 }
 
 // Παράγει τεχνικό documentId από τον τίτλο -- ο editor δεν χρειάζεται ποτέ

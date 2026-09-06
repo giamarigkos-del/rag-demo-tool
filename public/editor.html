@@ -5,6 +5,11 @@
 <title>Διαχείριση Περιεχομένου — Operations Portal</title>
 <link rel="icon" type="image/svg+xml" href="/favicon.svg">
 <link rel="stylesheet" href="/shared.css">
+<link rel="stylesheet" href="https://uicdn.toast.com/editor/latest/toastui-editor.min.css">
+<link rel="stylesheet" href="https://uicdn.toast.com/editor/latest/theme/toastui-editor-dark.min.css">
+<script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/dompurify/dist/purify.min.js"></script>
+<script src="https://uicdn.toast.com/editor/latest/toastui-editor-all.min.js"></script>
 <style>
   html,body{height:100%;}
   body{display:flex;flex-direction:column;}
@@ -91,10 +96,6 @@
   .preview-meta a{color:var(--accent);}
   .preview-body{font-size:14.5px;line-height:1.8;max-width:760px;
     border:1px solid var(--border);border-radius:8px;padding:20px;background:var(--surface);}
-  .preview-body p{margin:0 0 14px;}
-  .preview-body p:last-child{margin-bottom:0;}
-  .preview-body ul{margin:0 0 14px;padding-left:22px;}
-  .preview-body li{margin-bottom:6px;}
   .preview-actions{margin-top:20px;display:flex;gap:10px;}
   .preview-actions button{border:none;background:var(--accent);color:var(--on-accent);
     border-radius:6px;padding:9px 18px;font-size:13px;cursor:pointer;font-weight:600;}
@@ -109,21 +110,13 @@
   .edit-form input, .edit-form textarea{border:1px solid var(--border);border-radius:6px;
     padding:9px 10px;font-size:13.5px;width:100%;}
   .edit-form input:disabled{background:var(--surface-2);color:var(--text-soft);}
-  .edit-form textarea{resize:vertical;min-height:380px;line-height:1.6;}
 
-  .editor-toolbar{display:flex;gap:6px;}
-  .editor-toolbar button{border:1px solid var(--border);background:var(--surface-2);color:var(--text);
-    border-radius:4px;padding:5px 11px;font-size:12.5px;font-weight:700;cursor:pointer;font-family:inherit;}
-  .editor-toolbar button:hover{background:var(--accent-soft);border-color:var(--accent);}
+  #tuiEditor{margin-bottom:2px;}
 
   .live-preview-label{font-size:11px;color:var(--text-soft);text-transform:uppercase;
     letter-spacing:.02em;margin-top:2px;}
   .live-preview{font-size:14px;line-height:1.75;border:1px solid var(--border);border-radius:8px;
     padding:16px;background:var(--surface);min-height:100px;}
-  .live-preview p{margin:0 0 12px;}
-  .live-preview p:last-child{margin-bottom:0;}
-  .live-preview ul{margin:0 0 12px;padding-left:22px;}
-  .live-preview li{margin-bottom:6px;}
   .live-preview:empty::before{content:"Η προεπισκόπηση θα εμφανιστεί εδώ καθώς γράφεις…";color:var(--text-soft);}
   .edit-form button[type="submit"]{border:none;background:var(--accent);color:var(--on-accent);
     border-radius:6px;padding:10px 18px;font-size:13px;cursor:pointer;align-self:flex-start;font-weight:600;}
@@ -209,6 +202,7 @@
   let editingId = null;
   let originalText = "";
   let currentSelectedId = null;
+  let tuiEditorInstance = null;
 
   // --- λίστα εγγράφων (sidebar) ---
   async function loadDocuments() {
@@ -372,6 +366,7 @@
 
   // --- preview (πρώτο βήμα, πάντα, πριν το edit) ---
   async function openPreview(documentId) {
+    if (tuiEditorInstance) { tuiEditorInstance.destroy(); tuiEditorInstance = null; }
     currentSelectedId = documentId;
     renderDocList();
     const main = el("mainPanel");
@@ -402,7 +397,7 @@
           <span id="previewSourceLinkWrap"></span>
         </div>
       </div>
-      <div class="preview-body"></div>
+      <div class="preview-body md-content"></div>
       <div class="preview-actions">
         <button type="button" id="editFromPreviewBtn">Επεξεργασία</button>
         ${isDraft ? '<button type="button" id="publishBtn">Δημοσίευση</button>' : ""}
@@ -502,15 +497,10 @@
         </div>
         <input type="text" id="docTitle" placeholder="Τίτλος (π.χ. Πολιτική αδειών)" required>
         <div class="slug-hint" id="slugHint"></div>
-        <div class="editor-toolbar">
-          <button type="button" id="tbBold" title="Έντονα">B</button>
-          <button type="button" id="tbItalic" title="Πλάγια"><em>I</em></button>
-          <button type="button" id="tbList" title="Λίστα">☰ Λίστα</button>
-        </div>
-        <textarea id="docText" required></textarea>
+        <div id="tuiEditor"></div>
         <div class="upload-limit-hint">Μέγιστο: ~8.000 λέξεις ή 2MB</div>
-        <div class="live-preview-label">Προεπισκόπηση</div>
-        <div class="live-preview" id="livePreview"></div>
+        <div class="live-preview-label">Προεπισκόπηση (πώς θα φανεί στο πραγματικό άρθρο)</div>
+        <div class="live-preview md-content" id="livePreview"></div>
         <input type="text" id="docSourceUrl" placeholder="sourceUrl (προαιρετικό)">
         <button type="submit" id="uploadBtn">${isExisting ? "Ενημέρωση" : "Αποθήκευση ως πρόχειρο"}</button>
         ${isExisting ? "" : '<div class="upload-limit-hint">Θα χρειαστεί να πατήσεις "Δημοσίευση" μετά, για να γίνει ζωντανό.</div>'}
@@ -525,56 +515,31 @@
       </div>
     `;
     el("docTitle").value = title;
-    el("docText").value = text;
     el("docSourceUrl").value = sourceUrl;
 
-    // --- Section C: live preview -- ενημερώνεται σε κάθε πληκτρολόγηση ---
-    const docTextEl = el("docText");
+    // --- WYSIWYG: TOAST UI Editor -- ο χρήστης βλέπει το κείμενο ήδη
+    // μορφοποιημένο ενώ γράφει (bold/λίστες/επικεφαλίδες/πίνακες/links/κ.λπ.),
+    // χωρίς να χρειάζεται να ξέρει markdown syntax. Αποθηκεύει πάντα markdown
+    // από πίσω (getMarkdown()) -- καμία αλλαγή στο πώς σώζουμε/κάνουμε diff.
+    if (tuiEditorInstance) {
+      tuiEditorInstance.destroy();
+      tuiEditorInstance = null;
+    }
     const livePreviewEl = el("livePreview");
     const updatePreview = () => {
-      livePreviewEl.innerHTML = renderMarkdown(docTextEl.value);
+      livePreviewEl.innerHTML = renderMarkdown(tuiEditorInstance.getMarkdown());
     };
-    docTextEl.addEventListener("input", updatePreview);
+    tuiEditorInstance = new toastui.Editor({
+      el: el("tuiEditor"),
+      height: "420px",
+      initialEditType: "wysiwyg",
+      previewStyle: "vertical",
+      initialValue: text || "",
+      theme: "dark",
+      usageStatistics: false,
+    });
+    tuiEditorInstance.on("change", updatePreview);
     updatePreview();
-
-    // --- Section C: toolbar -- τυλίγει την επιλογή με markdown syntax,
-    // ώστε ο χρήστης να μη χρειάζεται να ξέρει markdown από μνήμης ---
-    function wrapSelection(before, after) {
-      const start = docTextEl.selectionStart;
-      const end = docTextEl.selectionEnd;
-      const value = docTextEl.value;
-      const selected = value.slice(start, end) || "κείμενο";
-      docTextEl.value = value.slice(0, start) + before + selected + after + value.slice(end);
-      const cursorStart = start + before.length;
-      docTextEl.focus();
-      docTextEl.setSelectionRange(cursorStart, cursorStart + selected.length);
-      updatePreview();
-    }
-
-    function toggleListPrefix() {
-      const start = docTextEl.selectionStart;
-      const end = docTextEl.selectionEnd;
-      const value = docTextEl.value;
-      const lineStart = value.lastIndexOf("\n", start - 1) + 1;
-      let lineEnd = value.indexOf("\n", end);
-      if (lineEnd === -1) lineEnd = value.length;
-      const segment = value.slice(lineStart, lineEnd);
-      const lines = segment.split("\n");
-      const alreadyList = lines.every(l => l.trim() === "" || /^-\s/.test(l));
-      const newLines = lines.map(l => {
-        if (l.trim() === "") return l;
-        return alreadyList ? l.replace(/^-\s+/, "") : "- " + l;
-      });
-      const newSegment = newLines.join("\n");
-      docTextEl.value = value.slice(0, lineStart) + newSegment + value.slice(lineEnd);
-      docTextEl.focus();
-      docTextEl.setSelectionRange(lineStart, lineStart + newSegment.length);
-      updatePreview();
-    }
-
-    el("tbBold").addEventListener("click", () => wrapSelection("**", "**"));
-    el("tbItalic").addEventListener("click", () => wrapSelection("*", "*"));
-    el("tbList").addEventListener("click", toggleListPrefix);
 
     if (isExisting) {
       // Υπάρχον έγγραφο -- το documentId είναι ήδη σταθερό, δεν αλλάζει
@@ -591,6 +556,7 @@
     }
 
     el("cancelEditBtn").addEventListener("click", () => {
+      if (tuiEditorInstance) { tuiEditorInstance.destroy(); tuiEditorInstance = null; }
       if (isExisting) openPreview(documentId);
       else {
         el("mainPanel").innerHTML = '<div class="main-placeholder">Επίλεξε ένα έγγραφο από τα αριστερά, ή δημιούργησε νέο.</div>';
@@ -655,7 +621,7 @@
     e.preventDefault();
     const btn = el("uploadBtn");
     const documentId = getFormDocumentId();
-    const newText = el("docText").value.trim();
+    const newText = tuiEditorInstance.getMarkdown().trim();
 
     if (!documentId) {
       el("uploadStatus").textContent = "❌ Γράψε έναν τίτλο πρώτα.";
@@ -700,7 +666,7 @@
   async function doUpload() {
     const documentId = getFormDocumentId();
     const title = el("docTitle").value.trim();
-    const text = el("docText").value.trim();
+    const text = tuiEditorInstance.getMarkdown().trim();
     const sourceUrl = el("docSourceUrl").value.trim();
     const status = el("uploadStatus");
 
@@ -714,6 +680,7 @@
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || "Άγνωστο σφάλμα");
 
+      if (tuiEditorInstance) { tuiEditorInstance.destroy(); tuiEditorInstance = null; }
       await loadDocuments();
       openPreview(documentId);
     } catch (err) {
