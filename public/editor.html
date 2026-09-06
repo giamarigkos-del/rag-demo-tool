@@ -1,8 +1,8 @@
 <!DOCTYPE html>
-<html lang="el">
+<html lang="en" data-i18n-doctitle="editorDocTitle">
 <head>
 <meta charset="UTF-8">
-<title>Διαχείριση Περιεχομένου — Operations Portal</title>
+<title>Content Management — Operations Portal</title>
 <link rel="icon" type="image/svg+xml" href="/favicon.svg">
 <link rel="stylesheet" href="/shared.css">
 <link rel="stylesheet" href="https://uicdn.toast.com/editor/latest/toastui-editor.min.css">
@@ -142,7 +142,10 @@
     letter-spacing:.02em;margin-top:2px;}
   .live-preview{font-size:14px;line-height:1.75;border:1px solid var(--border);border-radius:8px;
     padding:16px;background:var(--surface);min-height:100px;}
-  .live-preview:empty::before{content:"Η προεπισκόπηση θα εμφανιστεί εδώ καθώς γράφεις…";color:var(--text-soft);}
+  /* Το placeholder κείμενο ("Η προεπισκόπηση θα εμφανιστεί...") περνάει από
+     CSS custom property αντί για hardcoded content, ώστε να μπορεί να το
+     αλλάζει το JS ανάλογα με τη γλώσσα (βλ. applyLivePreviewEmptyText()). */
+  .live-preview:empty::before{content:var(--live-preview-empty-text, "");color:var(--text-soft);}
   .edit-form button[type="submit"]{border:none;background:var(--accent);color:var(--on-accent);
     border-radius:6px;padding:10px 18px;font-size:13px;cursor:pointer;align-self:flex-start;font-weight:600;}
   .edit-form button:disabled{opacity:.5;cursor:default;}
@@ -178,53 +181,68 @@
 <body>
 
   <div class="top-bar">
-    <strong>Διαχείριση Περιεχομένου</strong>
-    <a class="back-link" id="switchModeLink" href="#">Αλλαγή λειτουργίας</a>
+    <strong data-i18n="editorHeading">Content Management</strong>
+    <a class="back-link" id="switchModeLink" href="#" data-i18n="switchMode">Switch mode</a>
     <a class="back-link" href="/">←Portal</a>
+    <div class="lang-toggle" id="langToggle">
+      <button type="button" class="lang-btn" data-lang="en">EN</button>
+      <button type="button" class="lang-btn" data-lang="el">GR</button>
+    </div>
   </div>
 
   <div class="layout">
     <div class="sidebar">
       <div class="sidebar-section">
-        <button class="new-doc-btn" id="newDocBtn">+ Νέο έγγραφο</button>
-        <input type="text" class="filter-input" id="docFilterInput" placeholder="Φίλτρο με τίτλο…">
+        <button class="new-doc-btn" id="newDocBtn" data-i18n="newDoc">+ New document</button>
+        <input type="text" class="filter-input" id="docFilterInput" data-i18n-placeholder="filterByTitle" placeholder="Filter by title…">
       </div>
       <div class="sidebar-section grow">
         <div class="label-row">
-          <div class="label">Έγγραφα</div>
-          <button type="button" class="refresh-btn" id="allDocsBtn">Όλα τα έγγραφα</button>
+          <div class="label" data-i18n="documentsLabel">Documents</div>
+          <button type="button" class="refresh-btn" id="allDocsBtn" data-i18n="allDocs">All documents</button>
         </div>
-        <div id="docList">Φόρτωση…</div>
+        <div id="docList" data-i18n="loading">Loading…</div>
         <button type="button" class="deleted-toggle" id="deletedToggleBtn" style="display:none;"></button>
         <div id="deletedList" style="display:none;"></div>
       </div>
       <div class="sidebar-section">
-        <div class="label">Βρες με περιγραφή</div>
-        <input type="text" class="search-input" id="docSearchInput" placeholder="π.χ. τα ωράρια του Billing…">
+        <div class="label" data-i18n="searchByDescription">Find by description</div>
+        <input type="text" class="search-input" id="docSearchInput" data-i18n-placeholder="searchExamplePlaceholder" placeholder="e.g. Billing's working hours…">
         <div id="docSearchResults" class="search-results"></div>
       </div>
       <div class="test-q">
-        <div class="label">Δοκιμαστικό ερώτημα</div>
-        <input type="text" id="testQInput" placeholder="π.χ. Ποιο είναι το όριο έγκρισης;">
+        <div class="label" data-i18n="testQuestion">Test question</div>
+        <input type="text" id="testQInput" data-i18n-placeholder="testQuestionPlaceholder" placeholder="e.g. What's the approval limit?">
         <div id="testQOutput"></div>
       </div>
       <div class="sidebar-section">
         <div class="label-row">
-          <div class="label">Ερωτήσεις χωρίς απάντηση</div>
-          <button type="button" class="refresh-btn" id="refreshFallbackBtn">↻ Ανανέωση</button>
+          <div class="label" data-i18n="unansweredQuestions">Unanswered questions</div>
+          <button type="button" class="refresh-btn" id="refreshFallbackBtn" data-i18n="refresh">↻ Refresh</button>
         </div>
-        <div id="fallbackList" class="fallback-list">Φόρτωση…</div>
+        <div id="fallbackList" class="fallback-list" data-i18n="loading">Loading…</div>
       </div>
     </div>
 
     <div class="main" id="mainPanel">
-      <div class="main-placeholder">Φόρτωση…</div>
+      <div class="main-placeholder" data-i18n="loading">Loading…</div>
     </div>
   </div>
 
 <script src="/shared.js"></script>
 <script>
   const el = (id) => document.getElementById(id);
+
+  applyTranslations();
+  initLangToggle("langToggle");
+
+  // Το CSS custom property για το placeholder κείμενο του live preview
+  // (βλ. σχόλιο δίπλα στο .live-preview:empty::before) -- JSON.stringify
+  // παράγει ακριβώς τη σωστή CSS string σύνταξη (με τα εισαγωγικά).
+  document.documentElement.style.setProperty(
+    "--live-preview-empty-text",
+    JSON.stringify(t("livePreviewEmpty"))
+  );
 
   let allDocuments = [];
   let knownDocumentIds = new Set();
@@ -236,7 +254,7 @@
   // --- λίστα εγγράφων (sidebar) ---
   async function loadDocuments() {
     const list = el("docList");
-    list.textContent = "Φόρτωση…";
+    list.textContent = t("loading");
     try {
       const res = await fetch("/documents", { headers: HEADERS });
       const data = await res.json();
@@ -244,7 +262,7 @@
       knownDocumentIds = new Set(allDocuments.map(d => d.documentId));
       renderDocList();
     } catch (err) {
-      list.textContent = "Σφάλμα φόρτωσης: " + err.message;
+      list.textContent = t("loadErrorPrefix") + err.message;
     }
   }
 
@@ -259,8 +277,8 @@
 
     main.innerHTML = `
       <div class="doc-browser-head">
-        <h2>Όλα τα έγγραφα</h2>
-        <input type="text" class="doc-browser-search" id="docBrowserSearch" placeholder="Φίλτρο με τίτλο…">
+        <h2>${t("allDocs")}</h2>
+        <input type="text" class="doc-browser-search" id="docBrowserSearch" placeholder="${escapeHtml(t("filterByTitle"))}">
       </div>
       <div class="doc-browser-grid" id="docBrowserGrid"></div>
     `;
@@ -275,13 +293,13 @@
           );
       const grid = el("docBrowserGrid");
       if (!filtered.length) {
-        grid.innerHTML = `<div class="empty-note">${docs.length ? "Κανένα αποτέλεσμα." : "Δεν υπάρχουν έγγραφα ακόμα."}</div>`;
+        grid.innerHTML = `<div class="empty-note">${docs.length ? t("noResults") : t("noDocsYet")}</div>`;
         return;
       }
       grid.innerHTML = filtered.map(d => `
         <button type="button" class="doc-browser-card" data-id="${escapeHtml(d.documentId)}">
-          <h3>${escapeHtml(d.title || d.documentId)}${d.status === "draft" ? '<span class="status-badge draft">Πρόχειρο</span>' : ""}${expiryLabel(d.expiresAt) ? `<span class="status-badge expiry">${expiryLabel(d.expiresAt)}</span>` : ""}</h3>
-          <span class="doc-browser-card-date">Ενημερώθηκε ${timeAgo(d.updatedAt)}</span>
+          <h3>${escapeHtml(d.title || d.documentId)}${d.status === "draft" ? `<span class="status-badge draft">${t("draftBadge")}</span>` : ""}${expiryLabel(d.expiresAt) ? `<span class="status-badge expiry">${expiryLabel(d.expiresAt)}</span>` : ""}</h3>
+          <span class="doc-browser-card-date">${t("updatedPrefix")} ${timeAgo(d.updatedAt)}</span>
           <div class="doc-browser-card-preview">${escapeHtml(d.preview || "")}</div>
         </button>
       `).join("");
@@ -308,7 +326,7 @@
         );
 
     if (!filtered.length) {
-      list.innerHTML = `<div class="empty-note">${visibleDocs.length ? "Κανένα αποτέλεσμα." : "Δεν υπάρχουν έγγραφα ακόμα."}</div>`;
+      list.innerHTML = `<div class="empty-note">${visibleDocs.length ? t("noResults") : t("noDocsYet")}</div>`;
     } else {
       list.innerHTML = filtered.map(d => `
         <div class="doc-row${d.documentId === currentSelectedId ? " active" : ""}" data-id="${escapeHtml(d.documentId)}">
@@ -316,7 +334,7 @@
             <strong>${escapeHtml(d.title || d.documentId)}</strong>
             <span class="doc-time">${timeAgo(d.updatedAt)}</span>
           </div>
-          <div class="doc-row-preview">${escapeHtml(d.preview || "")}${d.status === "draft" ? '<span class="status-badge draft">Πρόχειρο</span>' : ""}${expiryLabel(d.expiresAt) ? `<span class="status-badge expiry">${expiryLabel(d.expiresAt)}</span>` : ""}</div>
+          <div class="doc-row-preview">${escapeHtml(d.preview || "")}${d.status === "draft" ? `<span class="status-badge draft">${t("draftBadge")}</span>` : ""}${expiryLabel(d.expiresAt) ? `<span class="status-badge expiry">${expiryLabel(d.expiresAt)}</span>` : ""}</div>
         </div>
       `).join("");
 
@@ -344,14 +362,14 @@
     }
 
     toggleBtn.style.display = "block";
-    toggleBtn.textContent = `${showDeleted ? "Απόκρυψη" : "Δες"} διαγραμμένα (${deleted.length})`;
+    toggleBtn.textContent = t(showDeleted ? "deletedToggleHide" : "deletedToggleShow", { count: deleted.length });
     listEl.style.display = showDeleted ? "block" : "none";
 
     if (showDeleted) {
       listEl.innerHTML = deleted.map(d => `
         <div class="deleted-row" data-id="${escapeHtml(d.documentId)}">
           <span>${escapeHtml(d.title || d.documentId)}</span>
-          <button type="button" class="restore-btn" data-id="${escapeHtml(d.documentId)}">Επαναφορά</button>
+          <button type="button" class="restore-btn" data-id="${escapeHtml(d.documentId)}">${t("restore")}</button>
         </div>
       `).join("");
 
@@ -373,10 +391,10 @@
         headers: HEADERS,
       });
       const data = await res.json();
-      if (!res.ok) throw new Error(data.error || "Αποτυχία επαναφοράς");
+      if (!res.ok) throw new Error(data.error || t("notFoundDefault"));
       await loadDocuments();
     } catch (err) {
-      alert("Σφάλμα επαναφοράς: " + err.message);
+      alert(t("restoreErrorPrefix") + err.message);
     }
   }
 
@@ -388,7 +406,7 @@
     const query = e.target.value.trim();
     if (!query) return;
     const results = el("docSearchResults");
-    results.textContent = "Αναζήτηση…";
+    results.textContent = t("searching");
     try {
       const res = await fetch("/search-documents", {
         method: "POST",
@@ -397,7 +415,7 @@
       });
       const data = await res.json();
       if (!data.documents || !data.documents.length) {
-        results.innerHTML = '<div class="empty-note">Κανένα αποτέλεσμα.</div>';
+        results.innerHTML = `<div class="empty-note">${t("noResults")}</div>`;
         return;
       }
       results.innerHTML = data.documents.map(d => `
@@ -410,20 +428,20 @@
         row.addEventListener("click", () => openPreview(row.dataset.id));
       });
     } catch (err) {
-      results.textContent = "Σφάλμα: " + err.message;
+      results.textContent = t("genericErrorPrefix") + err.message;
     }
   });
 
   // --- ερωτήσεις χωρίς απάντηση (Section E) ---
   async function loadFallbackQuestions() {
     const list = el("fallbackList");
-    list.textContent = "Φόρτωση…";
+    list.textContent = t("loading");
     try {
       const res = await fetch("/fallback-questions", { headers: HEADERS });
       const data = await res.json();
       const questions = data.questions || [];
       if (!questions.length) {
-        list.innerHTML = '<div class="empty-note">Καμία ερώτηση χωρίς απάντηση.</div>';
+        list.innerHTML = `<div class="empty-note">${t("noUnansweredQuestions")}</div>`;
         return;
       }
       list.innerHTML = questions.map(q => `
@@ -432,7 +450,7 @@
             ${escapeHtml(q.question)}
             <span class="fq-time">${timeAgo(q.timestamp)}</span>
           </div>
-          <button type="button" class="fallback-dismiss" title="Διαγραφή" aria-label="Διαγραφή">✕</button>
+          <button type="button" class="fallback-dismiss" title="${escapeHtml(t("deleteActionLabel"))}" aria-label="${escapeHtml(t("deleteActionLabel"))}">✕</button>
         </div>
       `).join("");
 
@@ -446,19 +464,19 @@
               method: "DELETE",
               headers: HEADERS,
             });
-            if (!delRes.ok) throw new Error("Αποτυχία διαγραφής");
+            if (!delRes.ok) throw new Error(t("notFoundDefault"));
             row.remove();
             if (!list.querySelector(".fallback-row")) {
-              list.innerHTML = '<div class="empty-note">Καμία ερώτηση χωρίς απάντηση.</div>';
+              list.innerHTML = `<div class="empty-note">${t("noUnansweredQuestions")}</div>`;
             }
           } catch (err) {
-            alert("Σφάλμα διαγραφής: " + err.message);
+            alert(t("deleteErrorPrefix") + err.message);
             btn.disabled = false;
           }
         });
       });
     } catch (err) {
-      list.textContent = "Σφάλμα: " + err.message;
+      list.textContent = t("genericErrorPrefix") + err.message;
     }
   }
 
@@ -470,11 +488,11 @@
     currentSelectedId = documentId;
     renderDocList();
     const main = el("mainPanel");
-    main.innerHTML = '<div class="empty-note">Φόρτωση…</div>';
+    main.innerHTML = `<div class="empty-note">${t("loading")}</div>`;
     try {
       const res = await fetch(`/document/${encodeURIComponent(documentId)}`, { headers: HEADERS });
       const data = await res.json();
-      if (!res.ok) throw new Error(data.error || "Δεν βρέθηκε");
+      if (!res.ok) throw new Error(data.error || t("notFoundDefault"));
       renderPreviewPanel(data);
     } catch (err) {
       main.innerHTML = `<div class="empty-note">❌ ${escapeHtml(err.message)}</div>`;
@@ -484,8 +502,8 @@
   function renderPreviewPanel(data) {
     const main = el("mainPanel");
     const metaParts = [];
-    if (data.updatedAt) metaParts.push(`Ενημερώθηκε ${timeAgo(data.updatedAt)}`);
-    if (data.chunkCount != null) metaParts.push(`${data.chunkCount} τμήματα`);
+    if (data.updatedAt) metaParts.push(`${t("updatedPrefix")} ${timeAgo(data.updatedAt)}`);
+    if (data.chunkCount != null) metaParts.push(t("chunksCountSuffix", { count: data.chunkCount }));
     if (expiryLabel(data.expiresAt)) metaParts.push(expiryLabel(data.expiresAt));
 
     const isDraft = data.status === "draft";
@@ -500,14 +518,14 @@
       </div>
       <div class="preview-body md-content"></div>
       <div class="preview-actions">
-        <button type="button" id="editFromPreviewBtn">Επεξεργασία</button>
-        ${isDraft ? '<button type="button" id="publishBtn">Δημοσίευση</button>' : ""}
-        <button type="button" class="btn-danger" id="deleteBtn">Διαγραφή</button>
+        <button type="button" id="editFromPreviewBtn">${t("edit")}</button>
+        ${isDraft ? `<button type="button" id="publishBtn">${t("publish")}</button>` : ""}
+        <button type="button" class="btn-danger" id="deleteBtn">${t("delete")}</button>
       </div>
     `;
     main.querySelector(".preview-head h2").innerHTML =
       escapeHtml(data.title || data.documentId) +
-      (isDraft ? '<span class="status-badge draft">Πρόχειρο</span>' : "");
+      (isDraft ? `<span class="status-badge draft">${t("draftBadge")}</span>` : "");
     el("previewMetaText").textContent = metaParts.join(" · ");
     main.querySelector(".preview-body").innerHTML = renderMarkdown(data.text || "");
 
@@ -516,7 +534,7 @@
       link.href = data.sourceUrl;
       link.target = "_blank";
       link.rel = "noopener";
-      link.textContent = " · Δες live →";
+      link.textContent = t("viewLiveLink");
       el("previewSourceLinkWrap").appendChild(link);
     }
 
@@ -526,26 +544,26 @@
       el("publishBtn").addEventListener("click", async () => {
         const btn = el("publishBtn");
         btn.disabled = true;
-        btn.textContent = "Δημοσίευση…";
+        btn.textContent = t("publishing");
         try {
           const res = await fetch(`/document/${encodeURIComponent(data.documentId)}/publish`, {
             method: "POST",
             headers: HEADERS,
           });
           const result = await res.json();
-          if (!res.ok) throw new Error(result.error || "Αποτυχία δημοσίευσης");
+          if (!res.ok) throw new Error(result.error || t("notFoundDefault"));
           await loadDocuments();
           openPreview(data.documentId);
         } catch (err) {
-          alert("Σφάλμα δημοσίευσης: " + err.message);
+          alert(t("publishErrorPrefix") + err.message);
           btn.disabled = false;
-          btn.textContent = "Δημοσίευση";
+          btn.textContent = t("publish");
         }
       });
     }
 
     el("deleteBtn").addEventListener("click", async () => {
-      if (!confirm(`Διαγραφή του εγγράφου "${data.title || data.documentId}"; Μπορείς να το επαναφέρεις αργότερα.`)) return;
+      if (!confirm(t("confirmDeleteDoc", { title: data.title || data.documentId }))) return;
       const btn = el("deleteBtn");
       btn.disabled = true;
       try {
@@ -554,12 +572,12 @@
           headers: HEADERS,
         });
         const result = await res.json();
-        if (!res.ok) throw new Error(result.error || "Αποτυχία διαγραφής");
+        if (!res.ok) throw new Error(result.error || t("notFoundDefault"));
         currentSelectedId = null;
         await loadDocuments();
         renderDocBrowser();
       } catch (err) {
-        alert("Σφάλμα διαγραφής: " + err.message);
+        alert(t("deleteErrorPrefix") + err.message);
         btn.disabled = false;
       }
     });
@@ -600,25 +618,25 @@
     main.innerHTML = `
       <form class="edit-form" id="editForm">
         <div class="form-header">
-          <div class="label">${isExisting ? "Επεξεργασία εγγράφου" : "Νέο έγγραφο"}</div>
-          <button type="button" id="cancelEditBtn">Άκυρο</button>
+          <div class="label">${isExisting ? t("editDocTitle") : t("newDocTitle")}</div>
+          <button type="button" id="cancelEditBtn">${t("cancel")}</button>
         </div>
-        <input type="text" id="docTitle" placeholder="Τίτλος (π.χ. Πολιτική αδειών)" required>
+        <input type="text" id="docTitle" placeholder="${escapeHtml(t("titlePlaceholder"))}" required>
         <div class="slug-hint" id="slugHint"></div>
         <div id="tuiEditor"></div>
-        <div class="upload-limit-hint">Μέγιστο: ~8.000 λέξεις ή 2MB</div>
-        <div class="live-preview-label">Προεπισκόπηση (πώς θα φανεί στο πραγματικό άρθρο)</div>
+        <div class="upload-limit-hint">${t("uploadLimitHint")}</div>
+        <div class="live-preview-label">${t("previewLabel")}</div>
         <div class="live-preview md-content" id="livePreview"></div>
-        <input type="text" id="docSourceUrl" placeholder="sourceUrl (προαιρετικό)">
-        <button type="submit" id="uploadBtn">${isExisting ? "Ενημέρωση" : "Αποθήκευση ως πρόχειρο"}</button>
-        ${isExisting ? "" : '<div class="upload-limit-hint">Θα χρειαστεί να πατήσεις "Δημοσίευση" μετά, για να γίνει ζωντανό.</div>'}
+        <input type="text" id="docSourceUrl" placeholder="${escapeHtml(t("sourceUrlPlaceholder"))}">
+        <button type="submit" id="uploadBtn">${isExisting ? t("updateBtn") : t("saveAsDraftBtn")}</button>
+        ${isExisting ? "" : `<div class="upload-limit-hint">${t("saveDraftHint")}</div>`}
         <div class="upload-status" id="uploadStatus"></div>
       </form>
       <div class="diff-view" id="diffView">
         <div class="diff-text" id="diffText"></div>
         <div class="diff-actions">
-          <button type="button" class="diff-confirm" id="diffConfirmBtn">Επιβεβαίωση &amp; Αποθήκευση</button>
-          <button type="button" class="diff-back" id="diffBackBtn">← Πίσω για επεξεργασία</button>
+          <button type="button" class="diff-confirm" id="diffConfirmBtn">${t("confirmAndSave")}</button>
+          <button type="button" class="diff-back" id="diffBackBtn">${t("backToEdit")}</button>
         </div>
       </div>
     `;
@@ -651,13 +669,14 @@
 
     if (isExisting) {
       // Υπάρχον έγγραφο -- το documentId είναι ήδη σταθερό, δεν αλλάζει
-      // ποτέ ξανά από αλλαγές στον τίτλο. Απλή ενημερωτική γραμμή.
+      // ποτέ ξανά από αλλαγές στον τίτλο. Απλή ενημερωτική γραμμή (τεχνικός
+      // όρος -- δεν μεταφράζεται, ίδιος και στις δύο γλώσσες).
       el("slugHint").textContent = `documentId: ${documentId}`;
     } else {
       // Νέο έγγραφο -- το slug ενημερώνεται ζωντανά καθώς γράφει τον τίτλο.
       const updateHint = () => {
         const slug = slugify(el("docTitle").value);
-        el("slugHint").textContent = slug ? `Θα αποθηκευτεί ως: ${slug}` : "";
+        el("slugHint").textContent = slug ? t("willBeSavedAs", { slug }) : "";
       };
       el("docTitle").addEventListener("input", updateHint);
       updateHint();
@@ -734,7 +753,7 @@
     const newText = tuiEditorInstance.getMarkdown().trim();
 
     if (!documentId) {
-      el("uploadStatus").textContent = "❌ Γράψε έναν τίτλο πρώτα.";
+      el("uploadStatus").textContent = t("needTitleError");
       return;
     }
 
@@ -743,7 +762,7 @@
     // αντικατάσταση, ακριβώς όπως στην περίπτωση της έμμεσης επεξεργασίας.
     if (!editingId && knownDocumentIds.has(documentId)) {
       btn.disabled = true;
-      el("uploadStatus").textContent = "Έλεγχος υπάρχοντος εγγράφου…";
+      el("uploadStatus").textContent = t("checkingExistingDoc");
       try {
         const res = await fetch(`/document/${encodeURIComponent(documentId)}`, { headers: HEADERS });
         const data = await res.json();
@@ -768,7 +787,7 @@
     const hasChanges = ops.some(op => op.t !== "same");
     el("diffText").innerHTML = hasChanges
       ? renderDiff(ops)
-      : '<div class="diff-nochange">Καμία αλλαγή στο κείμενο.</div>';
+      : `<div class="diff-nochange">${t("noTextChanges")}</div>`;
     el("editForm").style.display = "none";
     el("diffView").classList.add("show");
   }
@@ -780,7 +799,7 @@
     const sourceUrl = el("docSourceUrl").value.trim();
     const status = el("uploadStatus");
 
-    status.textContent = "Ανέβασμα…";
+    status.textContent = t("uploading");
     try {
       const res = await fetch("/upload", {
         method: "POST",
@@ -788,7 +807,7 @@
         body: JSON.stringify({ documentId, text, title: title || undefined, sourceUrl: sourceUrl || undefined }),
       });
       const data = await res.json();
-      if (!res.ok) throw new Error(data.error || "Άγνωστο σφάλμα");
+      if (!res.ok) throw new Error(data.error || t("notFoundDefault"));
 
       if (tuiEditorInstance) { tuiEditorInstance.destroy(); tuiEditorInstance = null; }
       await loadDocuments();
@@ -808,7 +827,7 @@
     const question = e.target.value.trim();
     if (!question) return;
     const out = el("testQOutput");
-    out.innerHTML = '<div class="empty-note">Φόρτωση…</div>';
+    out.innerHTML = `<div class="empty-note">${t("loading")}</div>`;
     try {
       const res = await fetch("/query", {
         method: "POST",
@@ -831,7 +850,7 @@
       <div class="test-q-answer${data.isFallback ? " fallback" : ""}"></div>
       <div class="test-q-meta"></div>
       <details class="test-q-details">
-        <summary>Τεχνικές λεπτομέρειες</summary>
+        <summary>${t("technicalDetails")}</summary>
         <pre></pre>
       </details>
     `;
@@ -840,7 +859,7 @@
     const meta = out.querySelector(".test-q-meta");
     if (data.primarySource) {
       const pct = Math.round((data.primarySource.score || 0) * 100);
-      meta.textContent = `Πηγή: ${data.primarySource.title || data.primarySource.documentId} · σχετικότητα ${pct}%`;
+      meta.textContent = t("sourceScoreLabel", { title: data.primarySource.title || data.primarySource.documentId, pct });
     }
 
     out.querySelector("pre").textContent = JSON.stringify(data, null, 2);

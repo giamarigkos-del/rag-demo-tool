@@ -33,3 +33,13 @@ input,textarea,button{font-family:inherit;}
 .md-content th,.md-content td{border:1px solid var(--border);padding:6px 10px;text-align:left;}
 .md-content th{background:var(--surface-2);}
 .md-content hr{border:none;border-top:1px solid var(--border);margin:20px 0;}
+
+/* Κουμπί εναλλαγής γλώσσας (EN | GR) -- κοινό σε όλες τις σελίδες.
+   Το ".lang-toggle-fixed" χρησιμοποιείται μόνο στο landing.html, που δεν
+   έχει καθόλου top nav bar για να "κουμπώσει" επάνω του. */
+.lang-toggle{display:flex;gap:2px;background:var(--surface-2);border:1px solid var(--border);
+  border-radius:4px;padding:2px;margin-left:auto;}
+.lang-toggle-fixed{position:fixed;top:16px;right:16px;z-index:10;margin-left:0;}
+.lang-toggle .lang-btn{border:none;background:none;color:var(--text-soft);font-size:11px;
+  font-weight:700;padding:4px 8px;border-radius:3px;cursor:pointer;font-family:inherit;}
+.lang-toggle .lang-btn.active{background:var(--accent);color:var(--on-accent);}

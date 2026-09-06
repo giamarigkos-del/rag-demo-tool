@@ -1,8 +1,8 @@
 <!DOCTYPE html>
-<html lang="el">
+<html lang="en" data-i18n-doctitle="indexDocTitle">
 <head>
 <meta charset="UTF-8">
-<title>Operations Portal — Βοηθός</title>
+<title>Operations Portal — Assistant</title>
 <link rel="icon" type="image/svg+xml" href="/favicon.svg">
 <link rel="stylesheet" href="/shared.css">
 <style>
@@ -68,30 +68,38 @@
 
   <div class="source-banner" id="sourceBanner">
     <span class="icon">📄</span>
-    <span>Η απάντηση προέρχεται από: <strong id="sourceBannerLabel"></strong></span>
-    <button id="sourceBannerBtn">Δες το άρθρο →</button>
+    <span id="sourceBannerText"></span>
+    <button id="sourceBannerBtn" data-i18n="viewArticle">View article →</button>
   </div>
 
-  <div class="host-nav"><strong>Operations Portal</strong><a class="editor-link" id="switchModeLink" href="#">Αλλαγή λειτουργίας</a><a class="editor-link" href="/editor.html">Διαχείριση περιεχομένου</a></div>
+  <div class="host-nav">
+    <strong>Operations Portal</strong>
+    <a class="editor-link" id="switchModeLink" href="#" data-i18n="switchMode">Switch mode</a>
+    <a class="editor-link" href="/editor.html" data-i18n="manageContent">Manage content</a>
+    <div class="lang-toggle" id="langToggle">
+      <button type="button" class="lang-btn" data-lang="en">EN</button>
+      <button type="button" class="lang-btn" data-lang="el">GR</button>
+    </div>
+  </div>
   <div class="host-body">
-    <h1>Πρόσφατα έγγραφα</h1>
-    <p class="host-intro">Διαδικασίες και πολιτικές της εταιρείας. Κάνε κλικ σε ένα έγγραφο για να το διαβάσεις, ή ρώτησε τον βοηθό κάτω-δεξιά.</p>
-    <div class="doc-grid" id="docGrid"><div class="host-empty">Φόρτωση…</div></div>
+    <h1 data-i18n="recentDocs">Recent documents</h1>
+    <p class="host-intro" data-i18n="hostIntro">Company procedures and policies. Click a document to read it, or ask the assistant bottom-right.</p>
+    <div class="doc-grid" id="docGrid"><div class="host-empty" data-i18n="loading">Loading…</div></div>
   </div>
 
   <button class="launcher" id="launcherBtn">✦</button>
 
   <div class="window" id="chatWindow">
     <div class="window-head">
-      <strong>Βοηθός</strong>
+      <strong data-i18n="assistantTitle">Assistant</strong>
     </div>
 
     <div class="chat-cell" id="userGrid">
-      <div class="label">Συνομιλία</div>
+      <div class="label" data-i18n="conversation">Conversation</div>
       <div class="thread" id="thread"></div>
       <div class="composer">
-        <input type="text" id="questionInput" placeholder="Ρώτησε κάτι…">
-        <button id="askBtn">Στείλε</button>
+        <input type="text" id="questionInput" data-i18n-placeholder="askPlaceholder" placeholder="Ask something…">
+        <button id="askBtn" data-i18n="send">Send</button>
       </div>
     </div>
   </div>
@@ -100,6 +108,9 @@
 <script>
   const el = (id) => document.getElementById(id);
   const thread = el("thread");
+
+  applyTranslations();
+  initLangToggle("langToggle");
 
   // --- host page: δυναμική λίστα εγγράφων (πραγματικά δεδομένα, όχι στατικό demo κείμενο) ---
   async function loadHostDocuments() {
@@ -112,19 +123,19 @@
       const documents = (data.documents || []).filter(d => d.status === "published");
 
       if (!documents.length) {
-        grid.innerHTML = '<div class="host-empty">Δεν υπάρχουν έγγραφα ακόμα σε αυτόν τον χώρο εργασίας.</div>';
+        grid.innerHTML = `<div class="host-empty">${t("noDocsInWorkspace")}</div>`;
         return;
       }
 
       grid.innerHTML = documents.map(d => `
         <a class="doc-card" href="/article.html?id=${encodeURIComponent(d.documentId)}">
           <h3>${escapeHtml(d.title || d.documentId)}</h3>
-          <span class="doc-card-date">Ενημερώθηκε ${timeAgo(d.updatedAt)}</span>
+          <span class="doc-card-date">${t("updatedPrefix")} ${timeAgo(d.updatedAt)}</span>
           <div class="doc-card-preview">${escapeHtml(d.preview || "")}</div>
         </a>
       `).join("");
     } catch (err) {
-      grid.innerHTML = '<div class="host-empty">Σφάλμα φόρτωσης εγγράφων.</div>';
+      grid.innerHTML = `<div class="host-empty">${t("docsLoadError")}</div>`;
     }
   }
 
@@ -186,7 +197,7 @@
       if (!data.isFallback) addSourceLink(botDiv, data.primarySource);
       renderSource(data.primarySource);
     } catch (err) {
-      addMessage("Σφάλμα σύνδεσης: " + err.message, "bot", true);
+      addMessage(t("connectionErrorPrefix") + err.message, "bot", true);
     } finally {
       el("askBtn").disabled = false;
     }
@@ -205,7 +216,7 @@
       return;
     }
 
-    el("sourceBannerLabel").textContent = source.title || source.documentId;
+    el("sourceBannerText").innerHTML = `${t("answerFrom")}<strong>${escapeHtml(source.title || source.documentId)}</strong>`;
     banner.classList.add("show");
     el("sourceBannerBtn").onclick = () => {
       window.location.href = `/article.html?id=${encodeURIComponent(source.documentId)}`;

@@ -66,7 +66,7 @@ async function getEmbedding(text, apiKey) {
 }
 
 async function askGemini(context, question, apiKey) {
-  const prompt = `Απάντησε στην ερώτηση χρησιμοποιώντας ΜΟΝΟ τις παρακάτω πληροφορίες. Αν η απάντηση δεν βρίσκεται στις πληροφορίες, πες ότι δεν γνωρίζεις.
+  const prompt = `Απάντησε στην ερώτηση χρησιμοποιώντας ΜΟΝΟ τις παρακάτω πληροφορίες. Αν η απάντηση δεν βρίσκεται στις πληροφορίες, πες ότι δεν γνωρίζεις. Απάντησε στην ίδια γλώσσα με την ερώτηση.
 
 Πληροφορίες:
 ${context}
@@ -443,11 +443,15 @@ async function handleQuery(request, env) {
   // Βήμα 4: ρώτα το Gemini
   const answer = await askGemini(context, question, env.GEMINI_API_KEY);
 
-  // Βήμα 5: εντόπισε αν η απάντηση είναι "δεν γνωρίζω" (fallback)
+  // Βήμα 5: εντόπισε αν η απάντηση είναι "δεν γνωρίζω" (fallback). Ελέγχουμε
+  // ΚΑΙ τις δύο γλώσσες -- τώρα που ο Gemini απαντάει στη γλώσσα της
+  // ερώτησης, μια αγγλική ερώτηση μπορεί να φέρει αγγλική άρνηση γνώσης.
   const normalizedAnswer = answer.toLowerCase();
   const isFallback =
     normalizedAnswer.includes("δεν γνωρίζω") ||
-    normalizedAnswer.includes("δε γνωρίζω");
+    normalizedAnswer.includes("δε γνωρίζω") ||
+    normalizedAnswer.includes("don't know") ||
+    normalizedAnswer.includes("do not know");
 
   if (isFallback) {
     await logFallbackQuestion(env, workspaceId, question);

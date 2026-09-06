@@ -1,15 +1,15 @@
 <!DOCTYPE html>
-<html lang="el">
+<html lang="en" data-i18n-doctitle="articleDocTitle">
 <head>
 <meta charset="UTF-8">
-<title>Άρθρο — Βοηθός Τεκμηρίωσης</title>
+<title>Article — Documentation Assistant</title>
 <link rel="icon" type="image/svg+xml" href="/favicon.svg">
 <link rel="stylesheet" href="/shared.css">
 <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/dompurify/dist/purify.min.js"></script>
 <style>
   .article-nav{height:56px;background:var(--surface);border-bottom:1px solid var(--border);
-    display:flex;align-items:center;justify-content:flex-end;padding:0 28px;}
+    display:flex;align-items:center;justify-content:flex-end;padding:0 28px;gap:10px;}
   .back-link{font-size:11.5px;font-weight:700;color:var(--text);text-decoration:none;
     background:var(--surface-2);border:1px solid var(--border);border-radius:4px;padding:5px 10px;}
   .back-link:hover{background:var(--accent-soft);border-color:var(--accent);}
@@ -23,10 +23,14 @@
 </head>
 <body>
   <div class="article-nav">
+    <div class="lang-toggle" id="langToggle">
+      <button type="button" class="lang-btn" data-lang="en">EN</button>
+      <button type="button" class="lang-btn" data-lang="el">GR</button>
+    </div>
     <a class="back-link" href="/">←Portal</a>
   </div>
   <div class="article-body" id="articleBody">
-    <div class="state-note">Φόρτωση…</div>
+    <div class="state-note" data-i18n="loading">Loading…</div>
   </div>
 
 <script src="/shared.js"></script>
@@ -35,27 +39,21 @@
   const params = new URLSearchParams(window.location.search);
   const documentId = params.get("id");
 
-  const GREEK_MONTHS = ["Ιαν","Φεβ","Μαρ","Απρ","Μαι","Ιουν","Ιουλ","Αυγ","Σεπ","Οκτ","Νοε","Δεκ"];
-
-  function formatDate(iso) {
-    if (!iso) return "";
-    const d = new Date(iso);
-    if (isNaN(d)) return "";
-    return `${d.getDate()} ${GREEK_MONTHS[d.getMonth()]} ${d.getFullYear()}`;
-  }
+  applyTranslations();
+  initLangToggle("langToggle");
 
   async function loadArticle() {
     const container = el("articleBody");
 
     if (!documentId) {
-      container.innerHTML = '<div class="state-note">Δεν βρέθηκε αναγνωριστικό εγγράφου.</div>';
+      container.innerHTML = `<div class="state-note">${t("noDocIdFound")}</div>`;
       return;
     }
 
     try {
       const res = await fetch(`/document/${encodeURIComponent(documentId)}`, { headers: HEADERS });
       if (!res.ok) {
-        container.innerHTML = '<div class="state-note">Το έγγραφο δεν βρέθηκε.</div>';
+        container.innerHTML = `<div class="state-note">${t("docNotFound")}</div>`;
         return;
       }
       const data = await res.json();
@@ -63,17 +61,17 @@
       // Section D: αν κάποιος ανοίξει link σε πρόχειρο/διαγραμμένο έγγραφο
       // (π.χ. παλιό bookmark), δεν δείχνουμε το κείμενο -- δεν έχει εγκριθεί.
       if (data.status && data.status !== "published") {
-        container.innerHTML = '<div class="state-note">Αυτό το έγγραφο δεν έχει δημοσιευτεί ακόμα.</div>';
+        container.innerHTML = `<div class="state-note">${t("docNotPublished")}</div>`;
         return;
       }
 
       container.innerHTML = `
         <h1>${escapeHtml(data.title || data.documentId)}</h1>
-        <span class="tag">Ενημερώθηκε: ${formatDate(data.updatedAt)}</span>
+        <span class="tag">${t("updatedColon")} ${formatDate(data.updatedAt)}</span>
         <div class="article-content md-content">${renderMarkdown(data.text || "")}</div>
       `;
     } catch (err) {
-      container.innerHTML = '<div class="state-note">Σφάλμα φόρτωσης: ' + escapeHtml(err.message) + '</div>';
+      container.innerHTML = `<div class="state-note">${t("loadErrorPrefix")}${escapeHtml(err.message)}</div>`;
     }
   }
 

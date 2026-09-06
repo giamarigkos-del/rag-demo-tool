@@ -1,8 +1,8 @@
 <!DOCTYPE html>
-<html lang="el">
+<html lang="en" data-i18n-doctitle="landingDocTitle">
 <head>
 <meta charset="UTF-8">
-<title>Operations Portal — Καλωσόρισες</title>
+<title>Operations Portal — Welcome</title>
 <link rel="icon" type="image/svg+xml" href="/favicon.svg">
 <link rel="stylesheet" href="/shared.css">
 <style>
@@ -34,34 +34,43 @@
 </style>
 </head>
 <body>
+  <div class="lang-toggle lang-toggle-fixed" id="langToggle">
+    <button type="button" class="lang-btn" data-lang="en">EN</button>
+    <button type="button" class="lang-btn" data-lang="el">GR</button>
+  </div>
+
   <div class="landing-box">
     <h1>Operations Portal</h1>
-    <p>Πριν συνεχίσεις, διάλεξε πώς θα μπεις.</p>
+    <p data-i18n="landingIntro">Before you continue, choose how you'll enter.</p>
 
     <div class="choice-grid" id="choiceGrid">
       <button type="button" class="choice-btn" id="devBtn">
-        <div class="choice-title">Developer</div>
-        <div class="choice-desc">Πρόσβαση στο πραγματικό workspace περιεχομένου (χρειάζεται κωδικό).</div>
+        <div class="choice-title" data-i18n="devTitle">Developer</div>
+        <div class="choice-desc" data-i18n="devDesc">Access to the real content workspace (requires a password).</div>
       </button>
       <button type="button" class="choice-btn" id="guestBtn">
-        <div class="choice-title">Επισκέπτης / Guest</div>
-        <div class="choice-desc">Δοκίμασε ελεύθερα το εργαλείο σε έναν δικό σου, ξεχωριστό χώρο. Ό,τι ανεβάσεις δεν το βλέπει κανείς άλλος, και σβήνεται μόνο του μετά από 7 μέρες.</div>
+        <div class="choice-title" data-i18n="guestTitle">Guest</div>
+        <div class="choice-desc" data-i18n="guestDesc">Freely try the tool in your own separate space. Nobody else sees what you upload, and it's automatically deleted after 7 days.</div>
       </button>
     </div>
 
     <div class="dev-form" id="devForm">
-      <label for="devPassword">Κωδικός Developer</label>
+      <label for="devPassword" data-i18n="devPasswordLabel">Developer password</label>
       <input type="password" id="devPassword" placeholder="••••••••" autocomplete="current-password">
       <div class="dev-form-actions">
-        <button type="button" class="submit-btn" id="devSubmitBtn">Είσοδος</button>
-        <button type="button" class="cancel-btn" id="devCancelBtn">Άκυρο</button>
+        <button type="button" class="submit-btn" id="devSubmitBtn" data-i18n="login">Log in</button>
+        <button type="button" class="cancel-btn" id="devCancelBtn" data-i18n="cancel">Cancel</button>
       </div>
-      <div class="dev-error" id="devError">Λάθος κωδικός.</div>
+      <div class="dev-error" id="devError" data-i18n="wrongPassword">Wrong password.</div>
     </div>
   </div>
 
+<script src="/shared.js"></script>
 <script>
   const el = (id) => document.getElementById(id);
+
+  applyTranslations();
+  initLangToggle("langToggle");
 
   el("guestBtn").addEventListener("click", () => {
     // Νέο, τυχαίο, απομονωμένο workspace -- κανείς άλλος δεν το βλέπει.
@@ -89,7 +98,7 @@
     const errorEl = el("devError");
     errorEl.classList.remove("show");
     btn.disabled = true;
-    btn.textContent = "Έλεγχος…";
+    btn.textContent = t("checking");
     try {
       const res = await fetch("/developer-login", {
         method: "POST",
@@ -98,18 +107,19 @@
       });
       const data = await res.json();
       if (!res.ok || !data.ok) {
+        errorEl.textContent = t("wrongPassword");
         errorEl.classList.add("show");
         btn.disabled = false;
-        btn.textContent = "Είσοδος";
+        btn.textContent = t("login");
         return;
       }
       localStorage.setItem("workspaceId", data.workspaceId);
       window.location.href = "/";
     } catch (err) {
-      errorEl.textContent = "Σφάλμα σύνδεσης: " + err.message;
+      errorEl.textContent = t("connectionErrorPrefix") + err.message;
       errorEl.classList.add("show");
       btn.disabled = false;
-      btn.textContent = "Είσοδος";
+      btn.textContent = t("login");
     }
   }
 
