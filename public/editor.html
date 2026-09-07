@@ -112,12 +112,64 @@
   .doc-browser-grid{display:grid;grid-template-columns:repeat(auto-fill, minmax(240px, 1fr));gap:14px;}
   .doc-browser-card{display:block;width:100%;text-align:left;background:var(--surface);
     border:1px solid var(--border);border-radius:8px;padding:16px;cursor:pointer;font-family:inherit;
-    transition:border-color .15s;}
+    transition:border-color .15s;position:relative;}
   .doc-browser-card:hover{border-color:var(--accent);}
   .doc-browser-card h3{font-size:14.5px;margin:0 0 6px;color:var(--text);display:flex;align-items:center;gap:6px;}
   .doc-browser-card-date{font-size:11.5px;color:var(--text-soft);display:block;margin-bottom:8px;}
   .doc-browser-card-preview{font-size:12.5px;line-height:1.6;color:var(--text-soft);
     display:-webkit-box;-webkit-line-clamp:3;-webkit-box-orient:vertical;overflow:hidden;}
+
+  /* Χειροκίνητος έλεγχος αντιφάσεων -- επιλογή έως 3 εγγράφων στο grid */
+  .compare-toggle-btn{border:1px solid var(--border);background:var(--surface);color:var(--text);
+    font-size:12.5px;font-weight:600;padding:7px 12px;border-radius:6px;cursor:pointer;font-family:inherit;
+    white-space:nowrap;}
+  .compare-toggle-btn.active{background:var(--accent);border-color:var(--accent);color:var(--on-accent);}
+  .compare-hint{font-size:12px;color:var(--text-soft);margin:-8px 0 14px;}
+  .doc-browser-card.compare-mode{padding-right:40px;}
+  .compare-checkbox{position:absolute;top:12px;right:12px;width:20px;height:20px;border-radius:4px;
+    border:2px solid var(--border);background:var(--surface);color:var(--on-accent);font-size:12px;
+    font-weight:700;display:flex;align-items:center;justify-content:center;flex-shrink:0;}
+  .doc-browser-card.compare-selected{border-color:var(--accent);}
+  .doc-browser-card.compare-selected .compare-checkbox{background:var(--accent);border-color:var(--accent);}
+  .doc-browser-card.compare-disabled{opacity:.4;pointer-events:none;}
+
+  /* Sticky bar κάτω-κάτω με τα επιλεγμένα έγγραφα -- βασισμένο σε γνωστό,
+     δοκιμασμένο UX pattern (π.χ. product-compare tools): persistent overlay
+     panel που δείχνει τι έχεις ήδη επιλέξει, όχι μόνο πόσα. */
+  .compare-bar{position:sticky;bottom:0;margin-top:20px;background:var(--surface);
+    border:1px solid var(--border);border-radius:10px;padding:14px 16px;display:flex;
+    align-items:center;gap:12px;flex-wrap:wrap;box-shadow:0 -4px 16px rgba(0,0,0,.35);}
+  .compare-chips{display:flex;gap:8px;flex-wrap:wrap;flex:1;min-width:0;}
+  .compare-chip{display:flex;align-items:center;gap:6px;background:var(--surface-2);
+    border:1px solid var(--border);border-radius:20px;padding:4px 6px 4px 12px;font-size:12.5px;
+    color:var(--text);max-width:220px;}
+  .compare-chip span{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+  .compare-chip button{border:none;background:none;color:var(--text-soft);cursor:pointer;
+    width:18px;height:18px;border-radius:50%;display:flex;align-items:center;justify-content:center;
+    font-size:11px;flex-shrink:0;padding:0;}
+  .compare-chip button:hover{background:var(--danger);color:var(--on-accent);}
+  .compare-run-btn{background:var(--accent);color:var(--on-accent);border:none;border-radius:6px;
+    padding:10px 18px;font-size:13px;font-weight:700;cursor:pointer;white-space:nowrap;font-family:inherit;}
+  .compare-run-btn:disabled{opacity:.5;cursor:default;}
+
+  /* Αποτελέσματα σύγκρισης -- εμφανίζονται μέσα στο ίδιο main panel, ποτέ σε
+     popup/νέο tab (γνωστό UX λάθος που είδαμε στην έρευνα). */
+  .compare-results-sub{font-size:13px;color:var(--text-soft);margin:-10px 0 18px;}
+  .finding-card{background:var(--surface);border:1px solid var(--warn-border);border-radius:8px;
+    padding:14px 16px;margin-bottom:12px;}
+  .finding-docs{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:8px;}
+  .finding-doc-link{border:1px solid var(--accent);background:var(--accent-soft);color:var(--text);
+    font-size:12px;font-weight:600;padding:3px 10px;border-radius:20px;cursor:pointer;font-family:inherit;}
+  .finding-doc-link:hover{background:var(--accent);color:var(--on-accent);}
+  .finding-desc{font-size:13.5px;line-height:1.6;color:var(--text);margin:0;}
+
+  .contradiction-row{font-size:12.5px;padding:8px 6px;border-bottom:1px solid var(--border);color:var(--text);
+    line-height:1.5;display:flex;align-items:flex-start;justify-content:space-between;gap:8px;}
+  .contradiction-row:last-child{border-bottom:none;}
+  .contradiction-row-text{flex:1;min-width:0;}
+  .contradiction-docs{display:block;font-weight:600;color:var(--text);margin-bottom:2px;}
+  .contradiction-desc{display:block;color:var(--text-soft);}
+  .contradiction-list{max-height:220px;overflow-y:auto;}
 
   .back-to-browser-btn{border:none;background:none;color:var(--accent);font-size:12.5px;
     cursor:pointer;padding:0;margin-bottom:14px;font-family:inherit;font-weight:600;}
@@ -230,6 +282,13 @@
         </div>
         <div id="fallbackList" class="fallback-list" data-i18n="loading">Loading…</div>
       </div>
+      <div class="sidebar-section">
+        <div class="label-row">
+          <div class="label" data-i18n="contradictionFindings">Contradiction findings</div>
+          <button type="button" class="refresh-btn" id="refreshContradictionsBtn" data-i18n="refresh">↻ Refresh</button>
+        </div>
+        <div id="contradictionList" class="contradiction-list" data-i18n="loading">Loading…</div>
+      </div>
     </div>
 
     <div class="main" id="mainPanel">
@@ -283,13 +342,56 @@
     const main = el("mainPanel");
     const docs = allDocuments.filter(d => d.status !== "deleted");
 
+    // Τοπική κατάσταση του "compare mode" -- ξαναρχίζει καθαρή κάθε φορά
+    // που ξαναμπαίνεις στο browser (renderDocBrowser καλείται ξανά), κάτι
+    // λογικό: δεν θες παλιά επιλογή να επιβιώνει ανάμεσα σε επισκέψεις.
+    let compareMode = false;
+    let compareSelection = [];
+
     main.innerHTML = `
       <div class="doc-browser-head">
         <h2>${t("allDocs")}</h2>
-        <input type="text" class="doc-browser-search" id="docBrowserSearch" placeholder="${escapeHtml(t("filterByTitle"))}">
+        <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;">
+          <input type="text" class="doc-browser-search" id="docBrowserSearch" placeholder="${escapeHtml(t("filterByTitle"))}">
+          <button type="button" class="compare-toggle-btn" id="compareToggleBtn">${t("compareToggleOn")}</button>
+        </div>
       </div>
       <div class="doc-browser-grid" id="docBrowserGrid"></div>
+      <div class="compare-bar" id="compareBar" style="display:none;">
+        <div class="compare-chips" id="compareChips"></div>
+        <button type="button" class="compare-run-btn" id="compareRunBtn" disabled>${t("compareRunLabel", { count: 0 })}</button>
+      </div>
     `;
+
+    function renderChips() {
+      const chips = el("compareChips");
+      chips.innerHTML = compareSelection.map(id => {
+        const doc = docs.find(d => d.documentId === id);
+        const title = doc ? (doc.title || doc.documentId) : id;
+        return `
+          <span class="compare-chip" data-id="${escapeHtml(id)}">
+            <span>${escapeHtml(title)}</span>
+            <button type="button" aria-label="${escapeHtml(t("deleteActionLabel"))}">✕</button>
+          </span>
+        `;
+      }).join("");
+      chips.querySelectorAll(".compare-chip button").forEach(btn => {
+        btn.addEventListener("click", () => {
+          const chipId = btn.closest(".compare-chip").dataset.id;
+          compareSelection = compareSelection.filter(id => id !== chipId);
+          syncCompareUI();
+        });
+      });
+      const runBtn = el("compareRunBtn");
+      runBtn.textContent = t("compareRunLabel", { count: compareSelection.length });
+      runBtn.disabled = compareSelection.length < COMPARE_MIN_DOCS_CLIENT;
+    }
+
+    function syncCompareUI() {
+      el("compareBar").style.display = compareMode && compareSelection.length ? "flex" : "none";
+      renderChips();
+      renderGrid();
+    }
 
     function renderGrid() {
       const filterVal = el("docBrowserSearch").value.trim().toLowerCase();
@@ -304,20 +406,137 @@
         grid.innerHTML = `<div class="empty-note">${docs.length ? t("noResults") : t("noDocsYet")}</div>`;
         return;
       }
-      grid.innerHTML = filtered.map(d => `
-        <button type="button" class="doc-browser-card" data-id="${escapeHtml(d.documentId)}">
-          <h3>${escapeHtml(d.title || d.documentId)}${d.status === "draft" ? `<span class="status-badge draft">${t("draftBadge")}</span>` : ""}${expiryLabel(d.expiresAt) ? `<span class="status-badge expiry">${expiryLabel(d.expiresAt)}</span>` : ""}</h3>
-          <span class="doc-browser-card-date">${t("updatedPrefix")} ${timeAgo(d.updatedAt)}</span>
-          <div class="doc-browser-card-preview">${escapeHtml(d.preview || "")}</div>
-        </button>
-      `).join("");
+      grid.innerHTML = filtered.map(d => {
+        const selected = compareSelection.includes(d.documentId);
+        const atLimit = compareSelection.length >= COMPARE_MAX_DOCS_CLIENT;
+        const disabled = compareMode && !selected && atLimit;
+        const cls = [
+          "doc-browser-card",
+          compareMode ? "compare-mode" : "",
+          selected ? "compare-selected" : "",
+          disabled ? "compare-disabled" : "",
+        ].filter(Boolean).join(" ");
+        return `
+          <button type="button" class="${cls}" data-id="${escapeHtml(d.documentId)}">
+            ${compareMode ? `<span class="compare-checkbox">${selected ? "✓" : ""}</span>` : ""}
+            <h3>${escapeHtml(d.title || d.documentId)}${d.status === "draft" ? `<span class="status-badge draft">${t("draftBadge")}</span>` : ""}${expiryLabel(d.expiresAt) ? `<span class="status-badge expiry">${expiryLabel(d.expiresAt)}</span>` : ""}</h3>
+            <span class="doc-browser-card-date">${t("updatedPrefix")} ${timeAgo(d.updatedAt)}</span>
+            <div class="doc-browser-card-preview">${escapeHtml(d.preview || "")}</div>
+          </button>
+        `;
+      }).join("");
       grid.querySelectorAll(".doc-browser-card").forEach(card => {
-        card.addEventListener("click", () => openPreview(card.dataset.id));
+        card.addEventListener("click", () => {
+          if (!compareMode) {
+            openPreview(card.dataset.id);
+            return;
+          }
+          const id = card.dataset.id;
+          if (compareSelection.includes(id)) {
+            compareSelection = compareSelection.filter(x => x !== id);
+          } else {
+            if (compareSelection.length >= COMPARE_MAX_DOCS_CLIENT) return;
+            compareSelection = [...compareSelection, id];
+          }
+          syncCompareUI();
+        });
       });
     }
 
     el("docBrowserSearch").addEventListener("input", renderGrid);
+
+    el("compareToggleBtn").addEventListener("click", () => {
+      compareMode = !compareMode;
+      compareSelection = [];
+      const btn = el("compareToggleBtn");
+      btn.textContent = compareMode ? t("compareToggleOff") : t("compareToggleOn");
+      btn.classList.toggle("active", compareMode);
+      el("compareBar").style.display = "none";
+      renderGrid();
+    });
+
+    el("compareRunBtn").addEventListener("click", () => runCompare(compareSelection.slice()));
+
     renderGrid();
+  }
+
+  // Ίδιο όριο με το backend (COMPARE_MIN_DOCS/COMPARE_MAX_DOCS στο
+  // src/index.js) -- κρατιέται ξεχωριστά εδώ γιατί το frontend δεν έχει
+  // πρόσβαση σε server-side σταθερές, αλλά πρέπει να ταιριάζουν.
+  const COMPARE_MIN_DOCS_CLIENT = 2;
+  const COMPARE_MAX_DOCS_CLIENT = 3;
+
+  async function runCompare(documentIds) {
+    const btn = el("compareRunBtn");
+    if (btn) {
+      btn.disabled = true;
+      btn.textContent = t("comparing");
+    }
+    try {
+      const res = await fetch("/compare-documents", {
+        method: "POST",
+        headers: HEADERS,
+        body: JSON.stringify({ documentIds }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || t("notFoundDefault"));
+
+      const titles = documentIds.map(id => {
+        const doc = allDocuments.find(d => d.documentId === id);
+        return doc ? (doc.title || doc.documentId) : id;
+      });
+      renderCompareResults(data.findings || [], titles);
+      loadContradictions();
+    } catch (err) {
+      alert(t("compareErrorPrefix") + err.message);
+      if (btn) {
+        btn.disabled = false;
+        btn.textContent = t("compareRunLabel", { count: documentIds.length });
+      }
+    }
+  }
+
+  // Τα αποτελέσματα εμφανίζονται ΜΕΣΑ στο ίδιο main panel -- ποτέ popup ή
+  // νέο tab (γνωστό UX λάθος, το είδαμε στην έρευνα πριν το σχεδιασμό).
+  function renderCompareResults(findings, titles) {
+    const main = el("mainPanel");
+    main.innerHTML = `
+      <button type="button" class="back-to-browser-btn" id="backFromResultsBtn">${t("backToAllDocs")}</button>
+      <div class="doc-browser-head">
+        <h2>${t("compareResultsTitle")}</h2>
+      </div>
+      <p class="compare-results-sub">${t("compareResultsSubtitle", { titles: escapeHtml(titles.join(", ")) })}</p>
+      <div id="compareResultsList">
+        ${findings.length
+          ? findings.map(f => findingCardHtml(f)).join("")
+          : `<div class="empty-note">${t("noContradictionsFound")}</div>`}
+      </div>
+    `;
+    el("backFromResultsBtn").addEventListener("click", () => {
+      currentSelectedId = null;
+      renderDocList();
+      renderDocBrowser();
+    });
+    el("compareResultsList").querySelectorAll(".finding-doc-link[data-id]").forEach(btn => {
+      btn.addEventListener("click", () => openPreview(btn.dataset.id));
+    });
+  }
+
+  function findingCardHtml(f) {
+    const titles = f.documentTitles || [];
+    const ids = f.documentIds || [];
+    const links = titles.map((title, i) => {
+      const id = ids[i];
+      return id
+        ? `<button type="button" class="finding-doc-link" data-id="${escapeHtml(id)}">${escapeHtml(title)}</button>`
+        : `<span class="finding-doc-link" style="cursor:default;">${escapeHtml(title)}</span>`;
+    }).join("");
+    return `
+      <div class="finding-card">
+        <div class="finding-docs">${links}</div>
+        <p class="finding-desc">${escapeHtml(f.description || "")}</p>
+      </div>
+    `;
   }
 
   function renderDocList() {
@@ -489,6 +708,58 @@
   }
 
   el("refreshFallbackBtn").addEventListener("click", loadFallbackQuestions);
+
+  // --- Ευρήματα αντιφάσεων (contradiction-checker, χειροκίνητο mode) ---
+  // Ίδιο ακριβώς πρότυπο με τα fallback questions: manual refresh, dismiss
+  // button ανά γραμμή, καμία background/polling διαδικασία.
+  async function loadContradictions() {
+    const list = el("contradictionList");
+    list.textContent = t("loading");
+    try {
+      const res = await fetch("/contradictions", { headers: HEADERS });
+      const data = await res.json();
+      const findings = data.findings || [];
+      if (!findings.length) {
+        list.innerHTML = `<div class="empty-note">${t("noContradictionFindings")}</div>`;
+        return;
+      }
+      list.innerHTML = findings.map(f => `
+        <div class="contradiction-row" data-id="${escapeHtml(f.id)}">
+          <div class="contradiction-row-text">
+            <span class="contradiction-docs">${escapeHtml((f.documentTitles || []).join(" vs "))}</span>
+            <span class="contradiction-desc">${escapeHtml(f.description || "")}</span>
+          </div>
+          <button type="button" class="fallback-dismiss" title="${escapeHtml(t("deleteActionLabel"))}" aria-label="${escapeHtml(t("deleteActionLabel"))}">✕</button>
+        </div>
+      `).join("");
+
+      list.querySelectorAll(".contradiction-row .fallback-dismiss").forEach(btn => {
+        btn.addEventListener("click", async () => {
+          const row = btn.closest(".contradiction-row");
+          const id = row.dataset.id;
+          btn.disabled = true;
+          try {
+            const delRes = await fetch(`/contradictions/${encodeURIComponent(id)}`, {
+              method: "DELETE",
+              headers: HEADERS,
+            });
+            if (!delRes.ok) throw new Error(t("notFoundDefault"));
+            row.remove();
+            if (!list.querySelector(".contradiction-row")) {
+              list.innerHTML = `<div class="empty-note">${t("noContradictionFindings")}</div>`;
+            }
+          } catch (err) {
+            alert(t("deleteErrorPrefix") + err.message);
+            btn.disabled = false;
+          }
+        });
+      });
+    } catch (err) {
+      list.textContent = t("genericErrorPrefix") + err.message;
+    }
+  }
+
+  el("refreshContradictionsBtn").addEventListener("click", loadContradictions);
 
   // --- preview (πρώτο βήμα, πάντα, πριν το edit) ---
   async function openPreview(documentId) {
@@ -882,6 +1153,7 @@
 
   loadDocuments().then(renderDocBrowser);
   loadFallbackQuestions();
+  loadContradictions();
 
   el("switchModeLink").addEventListener("click", (e) => {
     e.preventDefault();

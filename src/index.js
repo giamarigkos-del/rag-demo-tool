@@ -135,6 +135,217 @@ async function logFallbackQuestion(env, workspaceId, question) {
   );
 }
 
+// Χειροκίνητος έλεγχος αντιφάσεων: ο editor επιλέγει 2-3 έγγραφα, ΕΝΑ ΜΟΝΟ
+// Gemini call τα συγκρίνει όλα μαζί (όχι ζευγάρι-ζευγάρι -- πιο φθηνό, και ο
+// agent βλέπει όλο το context μαζί, οπότε μπορεί να πιάσει και αντιφάσεις
+// που εμπλέκουν και τα 3 έγγραφα ταυτόχρονα, όχι μόνο ζεύγη).
+const COMPARE_MIN_DOCS = 2;
+const COMPARE_MAX_DOCS = 3;
+
+async function askGeminiForContradictions(documents, apiKey) {
+  const documentsBlock = documents
+    .map((doc, i) => `--- Document ${i + 1}: "${doc.title}" ---\n${doc.text}`)
+    .join("\n\n");
+
+  const prompt = `You are reviewing internal operational documents for contradictions or inconsistencies -- cases where two or more documents give conflicting instructions, numbers, or rules about the same situation.
+
+${documentsBlock}
+
+Respond with ONLY a valid JSON array, no markdown code fences, no extra text. Each item must have exactly these fields:
+- "documentTitles": array of the exact document titles involved in this contradiction (use the titles exactly as given above)
+- "description": a short, specific description in English of what each document says and why they conflict
+
+If you find no contradictions, respond with exactly: []`;
+
+  const response = await fetch(
+    `https://generativelanguage.googleapis.com/v1beta/models/gemini-3.6-flash:generateContent?key=${apiKey}`,
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        contents: [{ parts: [{ text: prompt }] }],
+      }),
+    }
+  );
+
+  const data = await response.json();
+  const rawText = data?.candidates?.[0]?.content?.parts?.[0]?.text;
+  if (!rawText) {
+    throw new Error("Gemini comparison failed: " + JSON.stringify(data));
+  }
+
+  // Ο Gemini μερικές φορές τυλίγει το JSON σε ```json ... ``` code fence
+  // παρά τη ρητή οδηγία -- το αφαιρούμε πριν το parse.
+  const cleaned = rawText
+    .trim()
+    .replace(/^```(?:json)?\s*/i, "")
+    .replace(/```\s*$/, "")
+    .trim();
+
+  let findings;
+  try {
+    findings = JSON.parse(cleaned);
+  } catch (err) {
+    throw new Error("Could not parse Gemini comparison response as JSON: " + cleaned.slice(0, 200));
+  }
+
+  if (!Array.isArray(findings)) {
+    throw new Error("Gemini comparison response was not a JSON array");
+  }
+
+  return findings;
+}
+
+// Ίδια λογική ανάγνωσης με το handleGetDocument (fullText πρώτα, fallback σε
+// ανακατασκευή από chunks για παλιά έγγραφα χωρίς fullText) -- ξεχωριστό
+// helper, ώστε να μην αγγίξουμε το ήδη δουλεμένο handleGetDocument.
+async function getDocumentForCompare(env, workspaceId, documentId) {
+  const kvKey = `session:${workspaceId}:doc:${documentId}`;
+  const raw = await env.DOCUMENT_REGISTRY.get(kvKey);
+  if (!raw) return null;
+
+  const existing = JSON.parse(raw);
+  if (existing.status === "deleted") return null;
+
+  let fullText = existing.fullText;
+  if (!fullText) {
+    const ids = [];
+    for (let i = 0; i < (existing.chunkCount || 0); i++) {
+      ids.push(`${documentId}-chunk-${i}`);
+    }
+    const result = await env.VECTORIZE.getByIds(ids);
+    const sorted = result.sort((a, b) => a.metadata.chunkIndex - b.metadata.chunkIndex);
+    fullText = sorted.map((v) => v.metadata.text).join(" ");
+  }
+
+  return { documentId, title: existing.title || documentId, fullText };
+}
+
+async function handleCompareDocuments(request, env) {
+  const workspaceId = request.headers.get("X-Workspace-Id");
+  if (!workspaceId) {
+    return new Response(
+      JSON.stringify({ error: "Missing X-Workspace-Id header" }),
+      { status: 400, headers: JSON_HEADERS }
+    );
+  }
+
+  const body = await request.json();
+  const { documentIds } = body;
+
+  if (
+    !Array.isArray(documentIds) ||
+    documentIds.length < COMPARE_MIN_DOCS ||
+    documentIds.length > COMPARE_MAX_DOCS
+  ) {
+    return new Response(
+      JSON.stringify({
+        error: `Select between ${COMPARE_MIN_DOCS} and ${COMPARE_MAX_DOCS} documents to compare.`,
+      }),
+      { status: 400, headers: JSON_HEADERS }
+    );
+  }
+
+  const uniqueIds = [...new Set(documentIds)];
+  if (uniqueIds.length !== documentIds.length) {
+    return new Response(
+      JSON.stringify({ error: "Duplicate document selected." }),
+      { status: 400, headers: JSON_HEADERS }
+    );
+  }
+
+  const documents = await Promise.all(
+    uniqueIds.map((id) => getDocumentForCompare(env, workspaceId, id))
+  );
+
+  const missingIndex = documents.findIndex((d) => !d);
+  if (missingIndex !== -1) {
+    return new Response(
+      JSON.stringify({ error: `Document not found or unavailable: ${uniqueIds[missingIndex]}` }),
+      { status: 404, headers: JSON_HEADERS }
+    );
+  }
+
+  const rawFindings = await askGeminiForContradictions(
+    documents.map((d) => ({ title: d.title, text: d.fullText })),
+    env.GEMINI_API_KEY
+  );
+
+  // Χαρτογράφηση τίτλων -> documentIds, ώστε το frontend να μπορεί να δείχνει
+  // links προς τα σχετικά έγγραφα, όχι μόνο ονόματα.
+  const titleToId = new Map(documents.map((d) => [d.title.trim().toLowerCase(), d.documentId]));
+
+  // Ίδια πολιτική λήξης με τα ίδια τα έγγραφα (docTtlFor) -- ΟΧΙ το σύντομο
+  // fallback TTL. Ένα εύρημα αντίφασης είναι πραγματικό, χρήσιμο περιεχόμενο
+  // που μπορεί να θες να κρατήσεις μέχρι να το λύσεις, όχι "θόρυβος".
+  const { putOptions, expiresAt } = docTtlFor(workspaceId);
+  const savedFindings = [];
+
+  for (const finding of rawFindings) {
+    const titles = Array.isArray(finding.documentTitles) ? finding.documentTitles : [];
+    const ids = titles
+      .map((t) => titleToId.get(String(t).trim().toLowerCase()))
+      .filter(Boolean);
+
+    const id = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+    const key = `session:${workspaceId}:contradiction:${id}`;
+    const record = {
+      documentTitles: titles,
+      documentIds: ids,
+      description: finding.description || "",
+      createdAt: new Date().toISOString(),
+      expiresAt,
+    };
+    await env.DOCUMENT_REGISTRY.put(key, JSON.stringify(record), putOptions);
+    savedFindings.push({ id, ...record });
+  }
+
+  return new Response(JSON.stringify({ findings: savedFindings }), { headers: JSON_HEADERS });
+}
+
+async function handleGetContradictions(request, env) {
+  const workspaceId = request.headers.get("X-Workspace-Id");
+  if (!workspaceId) {
+    return new Response(
+      JSON.stringify({ error: "Missing X-Workspace-Id header" }),
+      { status: 400, headers: JSON_HEADERS }
+    );
+  }
+
+  const prefix = `session:${workspaceId}:contradiction:`;
+  const list = await env.DOCUMENT_REGISTRY.list({ prefix });
+
+  const findings = await Promise.all(
+    list.keys.map(async (key) => {
+      const raw = await env.DOCUMENT_REGISTRY.get(key.name);
+      if (!raw) return null;
+      const parsed = JSON.parse(raw);
+      return { id: key.name.slice(prefix.length), ...parsed };
+    })
+  );
+
+  const cleaned = findings
+    .filter(Boolean)
+    .sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
+
+  return new Response(JSON.stringify({ findings: cleaned }), { headers: JSON_HEADERS });
+}
+
+async function handleDeleteContradiction(request, env, id) {
+  const workspaceId = request.headers.get("X-Workspace-Id");
+  if (!workspaceId) {
+    return new Response(
+      JSON.stringify({ error: "Missing X-Workspace-Id header" }),
+      { status: 400, headers: JSON_HEADERS }
+    );
+  }
+
+  const kvKey = `session:${workspaceId}:contradiction:${id}`;
+  await env.DOCUMENT_REGISTRY.delete(kvKey);
+
+  return new Response(JSON.stringify({ id, deleted: true }), { headers: JSON_HEADERS });
+}
+
 async function handleUpload(request, env) {
   const workspaceId = request.headers.get("X-Workspace-Id");
   if (!workspaceId) {
@@ -795,6 +1006,25 @@ export default {
         // κρατάμε το raw αν το decode αποτύχει
       }
       return handleDeleteFallbackQuestion(request, env, id);
+    }
+
+    if (url.pathname === "/compare-documents" && request.method === "POST") {
+      return handleCompareDocuments(request, env);
+    }
+
+    if (url.pathname === "/contradictions" && request.method === "GET") {
+      return handleGetContradictions(request, env);
+    }
+
+    if (url.pathname.startsWith("/contradictions/") && request.method === "DELETE") {
+      const rawId = url.pathname.split("/contradictions/")[1] || "";
+      let id = rawId;
+      try {
+        id = decodeURIComponent(rawId);
+      } catch (err) {
+        // κρατάμε το raw αν το decode αποτύχει
+      }
+      return handleDeleteContradiction(request, env, id);
     }
 
     return new Response("Not found", { status: 404 });
