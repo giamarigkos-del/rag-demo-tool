@@ -118,6 +118,9 @@
   .doc-browser-card-preview{font-size:12.5px;line-height:1.6;color:var(--text-soft);
     display:-webkit-box;-webkit-line-clamp:3;-webkit-box-orient:vertical;overflow:hidden;}
 
+  .back-to-browser-btn{border:none;background:none;color:var(--accent);font-size:12.5px;
+    cursor:pointer;padding:0;margin-bottom:14px;font-family:inherit;font-weight:600;}
+  .back-to-browser-btn:hover{text-decoration:underline;}
   .preview-head h2{font-size:22px;margin:0 0 6px;}
   .preview-meta{font-size:12.5px;color:var(--text-soft);margin-bottom:20px;}
   .preview-meta a{color:var(--accent);}
@@ -513,6 +516,7 @@
     const isDraft = data.status === "draft";
 
     main.innerHTML = `
+      <button type="button" class="back-to-browser-btn" id="backToBrowserBtn">${t("backToAllDocs")}</button>
       <div class="preview-head">
         <h2></h2>
         <div class="preview-meta">
@@ -527,6 +531,11 @@
         <button type="button" class="btn-danger" id="deleteBtn">${t("delete")}</button>
       </div>
     `;
+    el("backToBrowserBtn").addEventListener("click", () => {
+      currentSelectedId = null;
+      renderDocList();
+      renderDocBrowser();
+    });
     main.querySelector(".preview-head h2").innerHTML =
       escapeHtml(data.title || data.documentId) +
       (isDraft ? `<span class="status-badge draft">${t("draftBadge")}</span>` : "");

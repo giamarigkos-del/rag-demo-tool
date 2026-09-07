@@ -1,7 +1,7 @@
 :root{
   --bg:#15151c; --surface:#1e1e26; --border:#34343f;
   --text:#E8E7EC; --text-soft:#9C9AA8;
-  --accent:#7C6FEF; --accent-soft:#26213D;
+  --accent:#6B7280; --accent-soft:#2B2E36;
   --danger:#E5646B; --surface-2:#242430;
   --warn-border:#D9A441; --warn-bg:#3A2F14; --ok:#4FAE7C; --on-accent:#F5F4FB;
 }

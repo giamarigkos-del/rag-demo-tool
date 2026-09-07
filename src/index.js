@@ -94,8 +94,31 @@ ${context}
   return answer;
 }
 
+// Αφαιρεί τα σύμβολα markdown (#, **, _, [](), κλπ) ώστε τα σύντομα
+// αποσπάσματα (preview) στις κάρτες λίστας να δείχνουν καθαρό κείμενο,
+// όχι raw σύνταξη. Χρησιμοποιείται ΜΟΝΟ για preview -- το πλήρες κείμενο
+// συνεχίζει να αποθηκεύεται/εμφανίζεται ως markdown παντού αλλού.
+function stripMarkdownForPreview(text) {
+  return text
+    .replace(/^#{1,6}\s+/gm, "")           // επικεφαλίδες: # ## ### ...
+    .replace(/```[\s\S]*?```/g, " ")        // code blocks
+    .replace(/`([^`]+)`/g, "$1")            // inline code
+    .replace(/!\[([^\]]*)\]\([^)]*\)/g, "$1") // εικόνες -> alt text
+    .replace(/\[([^\]]*)\]\([^)]*\)/g, "$1")  // links -> κείμενο
+    .replace(/^\s*>\s?/gm, "")              // blockquote >
+    .replace(/^\s*[-*+]\s+/gm, "")          // bullet lists
+    .replace(/^\s*\d+\.\s+/gm, "")          // αριθμημένες λίστες
+    .replace(/\*\*([^*]+)\*\*/g, "$1")      // **bold**
+    .replace(/__([^_]+)__/g, "$1")          // __bold__
+    .replace(/\*([^*]+)\*/g, "$1")          // *italic*
+    .replace(/_([^_]+)_/g, "$1")            // _italic_
+    .replace(/^\s*[-*_]{3,}\s*$/gm, "")     // οριζόντιες γραμμές ---
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
 function makePreview(text, maxWords = 18) {
-  const words = text.trim().split(/\s+/);
+  const words = stripMarkdownForPreview(text).split(/\s+/);
   const preview = words.slice(0, maxWords).join(" ");
   return words.length > maxWords ? preview + "…" : preview;
 }
