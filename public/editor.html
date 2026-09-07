@@ -476,7 +476,7 @@
       const res = await fetch("/compare-documents", {
         method: "POST",
         headers: HEADERS,
-        body: JSON.stringify({ documentIds }),
+        body: JSON.stringify({ documentIds, lang: getLang() }),
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || t("notFoundDefault"));

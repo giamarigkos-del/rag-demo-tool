@@ -142,10 +142,15 @@ async function logFallbackQuestion(env, workspaceId, question) {
 const COMPARE_MIN_DOCS = 2;
 const COMPARE_MAX_DOCS = 3;
 
-async function askGeminiForContradictions(documents, apiKey) {
+async function askGeminiForContradictions(documents, apiKey, lang) {
   const documentsBlock = documents
     .map((doc, i) => `--- Document ${i + 1}: "${doc.title}" ---\n${doc.text}`)
     .join("\n\n");
+
+  // Η περιγραφή ακολουθεί τη γλώσσα του UI editor (EN/GR) που στέλνει το
+  // frontend -- ΟΧΙ αυτόματα τη γλώσσα των ίδιων των εγγράφων, ώστε να
+  // ταιριάζει πάντα με το υπόλοιπο περιβάλλον (τίτλοι κουμπιών, μηνύματα).
+  const descriptionLanguage = lang === "el" ? "Greek" : "English";
 
   const prompt = `You are reviewing internal operational documents for contradictions or inconsistencies -- cases where two or more documents give conflicting instructions, numbers, or rules about the same situation.
 
@@ -153,7 +158,7 @@ ${documentsBlock}
 
 Respond with ONLY a valid JSON array, no markdown code fences, no extra text. Each item must have exactly these fields:
 - "documentTitles": array of the exact document titles involved in this contradiction (use the titles exactly as given above)
-- "description": a short, specific description in English of what each document says and why they conflict
+- "description": a short, specific description IN ${descriptionLanguage.toUpperCase()} of what each document says and why they conflict
 
 If you find no contradictions, respond with exactly: []`;
 
@@ -231,7 +236,7 @@ async function handleCompareDocuments(request, env) {
   }
 
   const body = await request.json();
-  const { documentIds } = body;
+  const { documentIds, lang } = body;
 
   if (
     !Array.isArray(documentIds) ||
@@ -268,7 +273,8 @@ async function handleCompareDocuments(request, env) {
 
   const rawFindings = await askGeminiForContradictions(
     documents.map((d) => ({ title: d.title, text: d.fullText })),
-    env.GEMINI_API_KEY
+    env.GEMINI_API_KEY,
+    lang
   );
 
   // Χαρτογράφηση τίτλων -> documentIds, ώστε το frontend να μπορεί να δείχνει
